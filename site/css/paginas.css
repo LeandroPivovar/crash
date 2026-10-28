@@ -45,6 +45,7 @@ body.pg-entrar .erro:empty { min-height: 0; margin: 0; }
 body.pg-interna main { display: grid; place-items: start center;
   background: url(../img/plataforma/fundo-conta.jpg) center / cover no-repeat, #130c23; }
 body.pg-carteira main { background: url(../img/plataforma/fundo-carteira.jpg) center / cover no-repeat, #130c23; }
+body.pg-interna:not(:has(#topo)) main { min-height: 100vh; } /* confirmar e-mail / nova senha não têm cabeçalho */
 body.pg-carteira .panel { max-width: 520px; background: #211332dd; }
 .big-balance { font: 800 55px var(--display); color: #ffc34f; padding: 10px 0 20px; }
 .big-balance small { font: 500 12px Inter, sans-serif; color: #b6a7c5; }
