@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Resultado</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+</head>
+<body class="pg-interna">
+<header id="topo"></header>
+<main>
+  <section class="panel" aria-labelledby="titulo">
+    <div class="badge"><span>⚑</span> DESAFIO SOLO</div>
+    <h2 id="titulo">Resultado da corrida</h2>
+    <p class="subtitle" id="quando"></p>
+    <dl class="resultado-linhas">
+      <div><dt>Entrada</dt><dd>✦ <span id="r-entrada"></span></dd></div>
+      <div><dt>Frutas coletadas</dt><dd id="r-frutas"></dd></div>
+      <div><dt>Recebido</dt><dd>✦ <span id="r-recebido"></span></dd></div>
+      <div><dt>Distância</dt><dd id="r-distancia"></dd></div>
+    </dl>
+    <div class="saldo-final" id="r-saldo-final"><span id="r-rotulo"></span><span id="r-diferenca" class="num"></span></div>
+    <div class="match-detail"><span>Saldo na carteira</span><strong class="num">✦ <span id="r-carteira"></span></strong></div>
+    <p class="note" id="r-verificacao" hidden></p>
+    <div class="acoes">
+      <button class="primary" id="de-novo" type="button">JOGAR DE NOVO <b>➜</b></button>
+      <a class="secondary" href="../lobby/">Voltar ao lobby</a>
+    </div>
+    <p class="erro" id="erro" role="alert"></p>
+  </section>
+</main>
+<script type="module" src="../js/paginas/resultado.js"></script>
+</body>
+</html>

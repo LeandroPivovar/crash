@@ -1,0 +1,11 @@
+{
+  "name": "crash-arena",
+  "private": true,
+  "description": "Crash Arena: plataforma (modo Solo) + jogo N. Sanity Beach infinito",
+  "scripts": {
+    "start": "node servidor/serve.js 8091"
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  }
+}

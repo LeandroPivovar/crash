@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Minha conta</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+<style>
+  .chave { font: 600 16px ui-monospace, Consolas, monospace; letter-spacing: .08em; background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 12px; word-break: break-all; margin: 8px 0 14px; }
+  #seg p { font-size: 14px; line-height: 1.5; }
+  #seg a { color: inherit; text-decoration: underline; }
+  .estado-2fa { font-weight: 700; margin: 6px 0 12px; }
+</style>
+</head>
+<body class="pg-interna">
+<header id="topo"></header>
+<main>
+  <section class="panel" aria-labelledby="titulo">
+    <div class="badge"><span>♙</span> PERFIL DO JOGADOR</div>
+    <h2 id="titulo">Meu perfil.</h2>
+    <p class="subtitle" id="subtitulo">Deixe sua marca na arena.</p>
+    <form id="form" novalidate>
+      <label for="nome">NOME DO JOGADOR</label>
+      <div class="field"><span>♙</span><input id="nome" maxlength="30" autocomplete="nickname"></div>
+      <div id="so-conta">
+        <label for="email">E-MAIL</label>
+        <div class="field"><span>✉</span><input id="email" type="email" autocomplete="email" placeholder="Seu e-mail"></div>
+        <label for="nova">NOVA SENHA</label>
+        <div class="field"><span>◇</span><input id="nova" type="password" minlength="8" placeholder="Deixe em branco para manter" autocomplete="new-password"></div>
+        <div id="campo-atual" hidden>
+          <label for="atual">SENHA ATUAL</label>
+          <div class="field"><span>◇</span><input id="atual" type="password" placeholder="Para confirmar a troca de e-mail ou senha" autocomplete="current-password"></div>
+        </div>
+      </div>
+      <p class="note" id="nota-visitante" hidden>Você está como visitante: o saldo fica nesta sessão. Crie uma conta para guardar suas moedas.</p>
+      <p class="erro" id="erro" role="alert"></p>
+      <button class="primary" id="salvar">SALVAR ALTERAÇÕES <b>✓</b></button>
+    </form>
+    <div id="seg" hidden>
+      <div class="divider">SEGURANÇA</div>
+      <p class="estado-2fa" id="estado-2fa"></p>
+      <p id="explica-2fa">Verificação em duas etapas: além da senha, um código de 6 dígitos que muda a cada 30 segundos num app do celular (Google Authenticator, Microsoft Authenticator, Authy…). <b>É obrigatória para sacar.</b></p>
+      <div id="s2-1">
+        <label for="senha-2fa">CONFIRME SUA SENHA</label>
+        <div class="field"><span>◇</span><input id="senha-2fa" type="password" autocomplete="current-password"></div>
+        <button class="primary" type="button" id="gerar-2fa">ATIVAR VERIFICAÇÃO <b>➜</b></button>
+      </div>
+      <div id="s2-2" hidden>
+        <p>1. No app, escolha <b>adicionar conta</b> → <b>inserir chave de configuração</b> e digite a chave abaixo (baseada em tempo). No celular, também dá para tocar em <a id="link-otp" href="#">abrir no app autenticador</a>.</p>
+        <p class="chave" id="chave-2fa"></p>
+        <label for="codigo-2fa">2. CÓDIGO QUE O APP MOSTRA</label>
+        <div class="field"><span>#</span><input id="codigo-2fa" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></div>
+        <button class="primary" type="button" id="confirmar-2fa">CONFIRMAR <b>✓</b></button>
+      </div>
+      <div id="s2-3" hidden>
+        <p><b>Ativada.</b> Guarde estes códigos de reserva num lugar seguro, fora do celular. Cada um vale uma vez, se você perder o celular. Eles não aparecem de novo.</p>
+        <p class="chave" id="reserva-2fa"></p>
+        <button class="primary" type="button" id="guardei-2fa">JÁ GUARDEI OS CÓDIGOS <b>✓</b></button>
+      </div>
+      <div id="s2-off" hidden>
+        <label for="senha-off">SENHA</label>
+        <div class="field"><span>◇</span><input id="senha-off" type="password" autocomplete="current-password"></div>
+        <label for="codigo-off">CÓDIGO DO APP (OU DE RESERVA)</label>
+        <div class="field"><span>#</span><input id="codigo-off" inputmode="numeric" autocomplete="one-time-code"></div>
+        <button class="secondary" type="button" id="desligar-2fa">Desligar verificação em duas etapas</button>
+      </div>
+      <p class="erro" id="erro-2fa" role="alert"></p>
+    </div>
+    <div class="divider">SESSÃO</div>
+    <button class="secondary" id="sair" type="button">Sair da conta</button>
+  </section>
+</main>
+<script type="module">
+import * as arena from '../js/arena.js';
+import { cabecalho, toast, ocupado } from '../js/paginas/comum.js';
+
+const u = await arena.exigirLogin('../');
+await arena.resolverPartidaPendente().catch(() => null);
+await cabecalho({ ativo: 'conta' });
+const $ = id => document.getElementById(id);
+$('nome').value = u.nome || '';
+$('email').value = u.email || '';
+$('so-conta').hidden = u.visitante;
+$('nota-visitante').hidden = !u.visitante;
+// trocar a senha ou o e-mail pede a senha atual
+let emailAtual = u.email || '';
+const precisaSenha = () => !!$('nova').value || $('email').value.trim().toLowerCase() !== emailAtual;
+const mostrarAtual = () => { $('campo-atual').hidden = !precisaSenha(); };
+$('nova').addEventListener('input', mostrarAtual);
+$('email').addEventListener('input', mostrarAtual);
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const dados = { nome: $('nome').value.trim(), email: $('email').value.trim() };
+  if (!dados.nome) { $('erro').textContent = 'O nome não pode ficar vazio.'; return; }
+  if ($('nova').value) dados.novaSenha = $('nova').value;
+  if (precisaSenha()) {
+    if (!$('atual').value) { $('erro').textContent = 'Informe a senha atual para confirmar.'; $('atual').focus(); return; }
+    dados.senhaAtual = $('atual').value;
+  }
+  ocupado($('salvar'), async () => {
+    try {
+      const novo = await arena.atualizarUsuario(dados);
+      emailAtual = novo.email || '';
+      $('erro').textContent = ''; $('nova').value = ''; $('atual').value = ''; $('campo-atual').hidden = true;
+      await cabecalho({ ativo: 'conta' });
+      toast('Perfil atualizado.');
+    } catch (err) { $('erro').textContent = err.message; }
+  });
+});
+// verificação em duas etapas (contas com e-mail; o operador ativa na página de regras)
+const passo2fa = qual => ['s2-1', 's2-2', 's2-3', 's2-off'].forEach(id => { $(id).hidden = id !== qual; });
+const erro2fa = t => { $('erro-2fa').textContent = t || ''; };
+function mostrar2fa(ativo) {
+  $('estado-2fa').textContent = ativo ? '✓ Verificação em duas etapas ativa' : '✗ Verificação em duas etapas desligada';
+  $('explica-2fa').hidden = ativo;
+  passo2fa(ativo ? (u.operador ? null : 's2-off') : 's2-1');
+}
+if (!u.visitante) { $('seg').hidden = false; mostrar2fa(!!u.doisFatoresAtivo); }
+$('gerar-2fa').addEventListener('click', e => ocupado(e.currentTarget, async () => {
+  erro2fa();
+  try {
+    const r = await arena.iniciar2faConta($('senha-2fa').value);
+    $('senha-2fa').value = '';
+    $('chave-2fa').textContent = r.segredo.match(/.{1,4}/g).join(' ');
+    $('link-otp').href = r.uri;
+    passo2fa('s2-2');
+    $('codigo-2fa').focus();
+  } catch (err) { erro2fa(err.message); }
+}));
+$('confirmar-2fa').addEventListener('click', e => ocupado(e.currentTarget, async () => {
+  erro2fa();
+  try {
+    const r = await arena.confirmar2faConta($('codigo-2fa').value.trim());
+    $('codigo-2fa').value = '';
+    $('reserva-2fa').textContent = r.codigosReserva.map(c => c.slice(0, 5) + '-' + c.slice(5)).join('   ');
+    $('estado-2fa').textContent = '✓ Verificação em duas etapas ativa';
+    $('explica-2fa').hidden = true;
+    passo2fa('s2-3');
+  } catch (err) { erro2fa(err.message); }
+}));
+$('guardei-2fa').addEventListener('click', () => { $('reserva-2fa').textContent = ''; mostrar2fa(true); toast('Verificação em duas etapas ativada.'); });
+$('desligar-2fa').addEventListener('click', e => ocupado(e.currentTarget, async () => {
+  erro2fa();
+  try {
+    await arena.desativar2faConta($('senha-off').value, $('codigo-off').value.trim());
+    $('senha-off').value = ''; $('codigo-off').value = '';
+    mostrar2fa(false);
+    toast('Verificação em duas etapas desligada. Saques ficam bloqueados até ativar de novo.');
+  } catch (err) { erro2fa(err.message); }
+}));
+$('sair').addEventListener('click', e => ocupado(e.currentTarget, async () => { await arena.sair().catch(() => {}); location.href = '../'; }));
+</script>
+</body>
+</html>

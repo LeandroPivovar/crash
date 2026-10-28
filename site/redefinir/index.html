@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Nova senha</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+</head>
+<body class="pg-interna">
+<main>
+  <section class="panel" aria-labelledby="titulo">
+    <div class="badge"><span>◇</span> RECUPERAR ACESSO</div>
+    <h2 id="titulo">Crie uma nova senha.</h2>
+    <p class="subtitle">O link vale por 30 minutos e só pode ser usado uma vez.</p>
+    <form id="form" novalidate>
+      <label for="senha">NOVA SENHA</label>
+      <div class="field"><span>◇</span><input id="senha" type="password" minlength="8" placeholder="Pelo menos 8 caracteres" autocomplete="new-password"></div>
+      <label for="confirmar">CONFIRMAR SENHA</label>
+      <div class="field"><span>◇</span><input id="confirmar" type="password" minlength="8" placeholder="Repita a senha" autocomplete="new-password"></div>
+      <p class="erro" id="erro" role="alert"></p>
+      <button class="primary" id="enviar">SALVAR NOVA SENHA <b>✓</b></button>
+    </form>
+    <a class="secondary" href="../" style="margin-top:14px">← Voltar para o login</a>
+  </section>
+</main>
+<script type="module">
+import * as arena from '../js/arena.js';
+import { ocupado } from '../js/paginas/comum.js';
+const $ = id => document.getElementById(id);
+const token = new URLSearchParams(location.search).get('token') || '';
+if (!token) $('erro').textContent = 'Link incompleto. Peça um novo em "Esqueci minha senha".';
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const s = $('senha').value;
+  if (s.length < 8) { $('erro').textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
+  if ($('confirmar').value !== s) { $('erro').textContent = 'As senhas precisam ser iguais.'; return; }
+  ocupado($('enviar'), async () => {
+    try { await arena.redefinirSenha(token, s); location.href = '../lobby/'; }
+    catch (err) { $('erro').textContent = err.message; }
+  });
+});
+</script>
+</body>
+</html>

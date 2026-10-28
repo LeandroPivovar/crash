@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Confirmar e-mail</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+</head>
+<body class="pg-interna">
+<main>
+  <section class="panel" aria-labelledby="titulo">
+    <div class="badge"><span>✉</span> CONFIRMAR E-MAIL</div>
+    <h2 id="titulo">Confirmando seu e-mail…</h2>
+    <p class="subtitle" id="msg">Só um instante.</p>
+    <p class="erro" id="erro" role="alert"></p>
+    <a class="secondary" id="voltar" href="../" hidden style="margin-top:14px">← Ir para o login</a>
+  </section>
+</main>
+<script type="module">
+import * as arena from '../js/arena.js';
+const $ = id => document.getElementById(id);
+const token = new URLSearchParams(location.search).get('token') || '';
+try {
+  if (!token) throw new Error('Link incompleto. Entre com seu e-mail e senha para receber um novo.');
+  const r = await arena.confirmarEmail(token);
+  $('titulo').textContent = 'E-mail confirmado!';
+  if (r.usuario) { $('msg').textContent = 'Tudo certo. Levando você para o lobby…'; setTimeout(() => { location.href = '../lobby/'; }, 1200); }
+  else { $('msg').textContent = 'Tudo certo. Agora entre com seu e-mail e senha.'; $('voltar').hidden = false; }
+} catch (err) {
+  $('titulo').textContent = 'Não deu para confirmar.';
+  $('msg').textContent = '';
+  $('erro').textContent = err.message;
+  $('voltar').hidden = false;
+}
+</script>
+</body>
+</html>

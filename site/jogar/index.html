@@ -1,0 +1,1706 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Crash Arena · Jogar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Inter:wght@500;600;700&display=swap">
+<style>
+  :root { --bg: #0b1020; --panel: rgba(12, 16, 30, 0.85); --text: #e8ecf5; --muted: #9aa4bb; --accent: #ff9a3c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  #panel { position: fixed; top: 12px; left: 12px; width: 220px; max-height: calc(100% - 24px); overflow: auto; background: var(--panel); border-radius: 8px; padding: 10px 12px; }
+  #panel h1 { font-size: 14px; margin: 0 0 4px; }
+  #panel p { margin: 0 0 8px; color: var(--muted); }
+  #zones button { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 3px 6px; border-radius: 4px; cursor: pointer; font: inherit; }
+  #zones button:hover { background: rgba(255,255,255,0.08); color: var(--accent); }
+  label { display: flex; gap: 6px; align-items: center; margin: 4px 0; color: var(--muted); }
+  #legend div { display: flex; gap: 6px; align-items: center; margin: 2px 0; }
+  #legend i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  #hud { position: fixed; top: 12px; right: 12px; background: var(--panel); border-radius: 8px; padding: 8px 12px; min-width: 180px; }
+  #hud .row { display: flex; justify-content: space-between; gap: 16px; font-size: 15px; font-weight: 600; }
+  #hud .row span:first-child { color: var(--muted); font-weight: 400; }
+  #hud .row span:last-child { display: inline-block; }
+  #hud .flash { animation: flash 0.8s ease-out; }
+  @keyframes flash { 0% { color: var(--accent); transform: scale(1.4); } 100% { transform: scale(1); } }
+  #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5, 8, 20, 0.55); }
+  #overlay[hidden] { display: none; }
+  #overlay .box { background: var(--panel); border-radius: 12px; padding: 20px 28px; text-align: center; min-width: 260px; max-width: calc(100% - 32px); }
+  #overlay h2 { margin: 0 0 12px; font-size: 22px; color: var(--accent); }
+  #overlay #ov-lines div { margin: 4px 0; font-size: 15px; }
+  #overlay button { margin-top: 14px; background: var(--accent); color: #1a1006; border: 0; border-radius: 6px; padding: 8px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+  #hud .cooldown { height: 4px; margin-top: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+  #hud .cooldown i { display: block; height: 100%; width: 100%; background: var(--accent); }
+  #hud .session { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.12); color: var(--muted); font-size: 12px; max-width: 220px; }
+  #hud button { margin-top: 6px; background: none; border: 1px solid rgba(255,255,255,0.2); color: var(--muted); border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+  #hud button:hover { color: var(--accent); border-color: var(--accent); }
+  #tip { position: fixed; pointer-events: none; background: var(--panel); border-radius: 6px; padding: 4px 8px; display: none; white-space: nowrap; }
+  /* placa de pontuação (imagens em img/jogo): números dentro do quadro escuro da placa */
+  /* pedido: sem o painel lateral nem o HUD de texto na tela (continuam no DOM; o jogo ainda os atualiza) */
+  #panel, #hud, #tip { display: none !important; }
+  #scoreboard { position: fixed; top: 8px; left: 12px; width: min(330px, calc(100vw - 32px)); aspect-ratio: 2172 / 724; pointer-events: none; }
+  #scoreboard[hidden] { display: none; }
+  #scoreboard > img { width: 100%; height: 100%; display: block; }
+  #scoreboard .digits { position: absolute; left: 61.5%; right: 12.5%; /* espaço vazio do quadro, depois do "R$" */ top: 45%; bottom: 31%; display: flex; justify-content: center; align-items: center; gap: 1%; }
+  #scoreboard .digits canvas { height: 100%; width: auto; }
+  #gameover { position: fixed; inset: 0; z-index: 50; background: #07060f; display: flex; align-items: center; justify-content: center; animation: fadein 0.6s ease-out; }
+  #gameover[hidden], #startscreen[hidden] { display: none; }
+  #startscreen { position: fixed; inset: 0; z-index: 70; background: #07060f; display: flex; align-items: center; justify-content: center; }
+  body:has(#startscreen:not([hidden])) #help, body:has(#carregando:not([hidden])) #help,
+  body:has(#carregando:not([hidden])) #scoreboard { display: none; }
+  /* ---- mesmo visual da plataforma (Crash Arena): roxo/laranja, Barlow Condensed e Inter ---- */
+  /* barra embaixo da tela de START */
+  .start-barra { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(16,11,32,.85)); }
+  .start-dica { color: #e8dcf5; font: 600 13px Inter, system-ui, sans-serif; text-shadow: 0 1px 3px #000; }
+  #start-lobby { background: rgba(16,11,32,.75); color: #e4d8f0; border: 1px solid #ffffff30; border-radius: 9px; padding: 9px 14px; font: 700 13px Inter, system-ui, sans-serif; cursor: pointer; }
+  #start-lobby small { color: #b7a7c8; font-weight: 500; }
+  #start-lobby:hover { border-color: #ffb84a; }
+  .so-toque { display: none; }
+  body.toque .so-toque { display: inline; }
+  body.toque .so-teclado { display: none; }
+  /* carregando o level.bin (22 MB) antes da tela de START */
+  #carregando { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: linear-gradient(90deg, #130d22e0, #130c23cc), url(../img/plataforma/hero-competition.png) center / cover, #100b20; }
+  #carregando[hidden] { display: none; }
+  .load-card { width: min(420px, 100%); background: linear-gradient(140deg, #2b1c3beb, #1a1428f5); border: 1px solid #ffffff20; border-radius: 24px;
+    padding: 30px; text-align: center; box-shadow: 0 22px 70px #08041266; color: #fff; font-family: Inter, system-ui, sans-serif; }
+  .load-logo { width: 190px; height: 40px; }
+  .load-card h2 { margin: 16px 0 4px; font: 800 32px "Barlow Condensed", Impact, sans-serif; }
+  .load-card p { margin: 0 0 18px; color: #aaa3bd; font-size: 13px; }
+  .load-bar { height: 10px; background: #100b1d; border: 1px solid #ffffff1b; border-radius: 6px; overflow: hidden; }
+  .load-bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff902b, #ffb545); transition: width .15s; }
+  .load-pct { display: block; margin-top: 8px; font: 800 20px "Barlow Condensed", sans-serif; color: #ffc34f; }
+  .load-card small { display: block; margin-top: 10px; color: #8e809e; font-size: 11px; }
+  /* controles de toque (tela inteira): arrastar para a esquerda/direita desvia, arrastar para cima pula */
+  #toque { display: none; }
+  body.toque.jogando #toque { display: block; }
+  .toque-zona { position: fixed; inset: 0; z-index: 40; touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .toque-zona span { font: 700 12px Inter, system-ui, sans-serif; color: #ffffffb0; background: rgba(16,11,32,.45); border-radius: 20px; padding: 6px 12px; transition: opacity 1s; }
+  body.toque-usado .toque-zona span { opacity: 0; } /* a dica some depois do primeiro uso */
+  #gameover img, #startscreen img { width: 100%; height: 100%; object-fit: contain; } /* imagem inteira, sem cortes */
+  #startscreen picture, #gameover picture { display: block; width: 100%; height: 100%; }
+  #gameover:not([hidden]) ~ #help { display: none; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  #scoreboard { z-index: 60; }
+  body:has(#gameover:not([hidden])) #scoreboard { display: none; } /* pedido: sem os pontos na tela de fim */
+  #help { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(24,14,39,.85); border: 1px solid #ffffff1b; border-radius: 10px; padding: 7px 14px; color: #c9bcd8; white-space: nowrap; font: 500 12px Inter, system-ui, sans-serif; }
+  body.toque #help { display: none; }
+  canvas { touch-action: none; }
+  /* celular: nada de zoom com toque duplo ou pinça, nem seleção/menu ao segurar (o jogo usa a tela toda) */
+  html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>N. Sanity Beach</h1>
+  <p id="score"></p>
+  <p id="stats">carregando…</p>
+  <label><input type="checkbox" id="wire"> wireframe</label>
+  <label><input type="checkbox" id="trans" checked> semitransparentes</label>
+  <label><input type="checkbox" id="ents" checked> entidades</label>
+  <label><input type="checkbox" id="gallery"> galeria de caixas</label>
+  <label><input type="checkbox" id="colview"> mostrar colisão</label>
+  <label><input type="checkbox" id="loopmode" checked> modo infinito</label>
+  <label><input type="checkbox" id="autorun" checked> correr sozinho</label>
+  <div id="legend"></div>
+  <p style="margin-top:8px">Zonas (clique para ir):</p>
+  <div id="zones"></div>
+</div>
+<div id="hud">
+  <div class="loop-only">
+    <div class="row"><span>Pontos</span><span id="hud-score">0</span></div>
+    <div class="row"><span>Recorde</span><span id="hud-record">0</span></div>
+    <div class="row"><span>Distância</span><span id="hud-loop">0</span></div>
+    <div class="row"><span>Velocidade</span><span id="hud-speed">1.00×</span></div>
+  </div>
+  <div class="row"><span>Frutas</span><span id="hud-fruit">0</span></div>
+  <div class="row"><span>Vidas</span><span id="hud-lives">4</span></div>
+  <div class="row"><span>Aku Aku</span><span id="hud-aku">—</span></div>
+  <div class="row"><span>Tempo</span><span id="hud-time">0:00</span></div>
+  <div class="row"><span>Caixas</span><span id="hud-boxes">0</span></div>
+  <div class="row"><span>Inimigos</span><span id="hud-enemies">0</span></div>
+  <div class="row"><span>Mortes</span><span id="hud-deaths">0</span></div>
+  <div class="session" id="hud-session"></div>
+  <button id="hud-reset">Zerar sessão</button>
+</div>
+<div id="scoreboard" hidden><img src="../img/jogo/score-board.png" alt="Saldo R$"><div class="digits"></div></div>
+<div id="carregando" role="status" aria-live="polite">
+  <div class="load-card">
+    <img class="load-logo" src="../img/plataforma/logo-horizontal.svg" alt="Crash Arena">
+    <h2>Carregando a ilha…</h2>
+    <p>N. Sanity Beach · Desafio solo</p>
+    <div class="load-bar" aria-hidden="true"><i id="carregando-barra"></i></div>
+    <span class="load-pct" id="carregando-pct">0%</span>
+    <small>Na primeira vez baixa cerca de 22 MB; depois fica guardado no navegador.</small>
+  </div>
+</div>
+<div id="startscreen" hidden>
+  <picture>
+    <source media="(orientation: portrait) and (max-width: 900px)" srcset="../img/jogo/start-celular.jpg"><!-- celular em pé -->
+    <img src="../img/jogo/start-v2.jpg" alt="Start — pressione espaço">
+  </picture>
+  <div class="start-barra">
+    <button type="button" id="start-lobby">← Lobby <small>(devolve a entrada)</small></button>
+    <span class="start-dica so-teclado">Espaço: começar · Esc: voltar</span>
+    <span class="start-dica so-toque">Toque para começar</span>
+  </div>
+</div>
+<div id="toque" aria-hidden="true">
+  <div class="toque-zona"><span>arraste ◀ ▶ para desviar · ▲ para pular</span></div>
+</div>
+<div id="gameover" hidden><picture>
+  <source media="(orientation: portrait) and (max-width: 900px)" srcset="../img/jogo/game-over-celular.jpg"><!-- celular em pé -->
+  <img src="../img/jogo/game-over.png" alt="Partida encerrada">
+</picture></div>
+<div id="overlay" hidden>
+  <div class="box">
+    <h2 id="ov-title"></h2>
+    <div id="ov-lines"></div>
+    <button id="ov-again">Jogar de novo</button>
+  </div>
+</div>
+<div id="tip"></div>
+<div id="help"></div>
+
+<script type="importmap">
+{ "imports": { "three": "../js/vendor/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { prepararNivel, criarMundo, quantizarX, codificar, decodificar, Gravador, SIM_DT, SIM_VERSAO, LOOP_END_Z } from '../js/jogo/mundo.js';
+import * as arena from '../js/arena.js';
+import { baixarComProgresso } from '../js/jogo/carregar.js';
+
+// Partida do Crash Arena, criada no lobby (entrada, semente e regras). Sem login ou sem partida, volta ao
+// lobby. Se a página foi recarregada no meio da corrida, a partida termina com o que já tinha sido coletado.
+const { usuario: jogador } = await arena.sessao().catch(() => ({}));
+const partida = jogador ? await arena.partidaAberta().catch(() => null) : null;
+if (!partida) {
+  location.replace(jogador ? '../lobby/' : '../');
+  await new Promise(() => {}); // para aqui
+}
+if (partida.estado === 'jogando') {
+  await arena.resolverPartidaPendente().catch(() => {});
+  location.replace('../resultado/');
+  await new Promise(() => {});
+}
+const config = arena.regrasDaPartida(partida); // regras de /admin/configuracoes no momento da partida
+
+const SCALE = 1 / 256; // unidades do jogo -> cena
+
+const json = await (await fetch('../data/level.json')).json();
+// medida do chão (mapa plano) pronta: poupa o cálculo ao abrir; sem ela, o jogo calcula (mesmo resultado)
+const planoPronto = fetch('../data/plano.json').then(r => (r.ok ? r.json() : null)).catch(() => null);
+// level.bin (22 MB): com barra de progresso e guardado no cache do navegador para as próximas partidas
+const barra = document.getElementById('carregando-barra'), pct = document.getElementById('carregando-pct');
+const bin = await baixarComProgresso('../data/level.bin', f => {
+  barra.style.width = `${Math.round(f * 100)}%`;
+  pct.textContent = `${Math.round(f * 100)}%`;
+});
+
+// parte fixa da simulação (trilha medida, trechos-modelo, guia): a mesma que o servidor usa para refazer a corrida
+const tempos = {}; let t0 = performance.now(); // quanto cada etapa do carregamento leva (viewer.tempos)
+const marcar = nome => { const t = performance.now(); tempos[nome] = Math.round(t - t0); t0 = t; };
+const nivel = prepararNivel(json, bin, await planoPronto);
+marcar('prepararNivel');
+// Mapa plano: o cenário é desenhado "achatado" pela mesma altura do chão que a simulação usa (alturaChao):
+// cada vértice desce a altura do chão da trilha no seu x/z, e o chão fica em y = 0 do começo ao fim.
+const { alturaChao } = nivel;
+// Num degrau, o vértice que fica bem na quina pegaria a altura "do meio" (a medida é interpolada entre pontos
+// vizinhos) e o degrau sobraria pela metade. Então cada vértice usa a altura do lado a que pertence: entre as
+// alturas medidas ao redor dele (um pouco antes/depois e para os lados), a mais próxima da sua própria altura.
+const VIZ = [[-110, -30], [-110, 0], [-110, 30], [0, -30], [0, 30], [110, -30], [110, 0], [110, 30]];
+const descidaVertice = (x, y, z) => { // unidades do jogo
+  let melhor = alturaChao(x, z);
+  for (const [dx, dz] of VIZ) {
+    const h = alturaChao(x + dx, z + dz);
+    if (Math.abs(y - h) < Math.abs(y - melhor)) melhor = h;
+  }
+  return melhor;
+};
+const achatar = P => { // posições já em escala (SCALE), [x, y, z, x, y, z, ...]
+  for (let i = 0; i < P.length; i += 3) P[i + 1] -= descidaVertice(P[i] / SCALE, P[i + 1] / SCALE, P[i + 2] / SCALE) * SCALE;
+  return P;
+};
+// O mesmo vértice do cenário aparece no começo real da fase e nos trechos: a descida de cada um é calculada uma
+// vez só por passe (carregamento mais leve, principalmente no celular).
+const descidaPass = {};
+const descidaDe = pass => descidaPass[pass] || (descidaPass[pass] = (() => {
+  const p = json.passes[pass], pos = new Float32Array(bin, p.pos, p.count * 3), d = new Float32Array(p.count);
+  for (let j = 0; j < p.count; j++) d[j] = descidaVertice(pos[j * 3], pos[j * 3 + 1], pos[j * 3 + 2]);
+  return d;
+})());
+
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+// celular: resolução 1× (o estilo do jogo é de PS1, sem suavização; 2× desenha 4 vezes mais pixels e esquenta o aparelho)
+const CELULAR = matchMedia('(pointer: coarse)').matches;
+renderer.setPixelRatio(CELULAR ? 1 : Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x4a78b8);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 4000);
+// Celular em pé: a tela é estreita, então a câmera fica um pouco mais alta e afastada e com o campo de visão
+// mais aberto, para os buracos aparecerem antes.
+const retrato = () => innerHeight > innerWidth;
+const CAM_RETRATO = { longe: 1.12, sobe: 180, fov: 74 }; // afastar demais entra nas copas das árvores
+const ajustarCamera = () => { camera.fov = retrato() ? CAM_RETRATO.fov : 60; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); };
+ajustarCamera();
+camera.rotation.order = 'YXZ';
+window.viewer = { camera, scene };
+
+// Placa SALDO R$ (valor com centavos): os números 1–9 são recortados da grade 3×3 (img/jogo/digits.png) pela caixa dos pixels
+// visíveis de cada célula. A grade não tem 0, então ele é desenhado no mesmo estilo (dourado, contorno escuro).
+const scoreboard = (() => {
+  const box = document.querySelector('#scoreboard .digits');
+  const glyphs = {};
+  let shown = null, pending = null;
+  const img = new Image();
+  img.onload = () => {
+    const W = img.width, H = img.height;
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, W, H).data;
+    for (let k = 0; k < 9; k++) {
+      const cx0 = Math.floor((k % 3) * W / 3), cy0 = Math.floor(Math.floor(k / 3) * H / 3);
+      const cx1 = Math.floor(((k % 3) + 1) * W / 3), cy1 = Math.floor((Math.floor(k / 3) + 1) * H / 3);
+      let x0 = W, y0 = H, x1 = -1, y1 = -1;
+      for (let y = cy0; y < cy1; y += 2) for (let x = cx0; x < cx1; x += 2) {
+        const i = (y * W + x) * 4;
+        if (px[i + 3] > 40 && px[i] + px[i + 1] + px[i + 2] > 60) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      const g = document.createElement('canvas');
+      g.width = x1 - x0 + 3; g.height = y1 - y0 + 3;
+      g.getContext('2d').drawImage(img, x0 - 1, y0 - 1, g.width, g.height, 0, 0, g.width, g.height);
+      glyphs[k + 1] = g;
+    }
+    // 0 no mesmo tamanho do 8
+    const ref = glyphs[8], z = document.createElement('canvas');
+    z.width = ref.width; z.height = ref.height;
+    const zc = z.getContext('2d');
+    zc.font = `900 ${Math.round(ref.height * 1.12)}px Impact, 'Arial Black', sans-serif`;
+    zc.textAlign = 'center'; zc.textBaseline = 'middle';
+    const grad = zc.createLinearGradient(0, 0, 0, z.height);
+    grad.addColorStop(0, '#ffe200'); grad.addColorStop(0.55, '#ffab12'); grad.addColorStop(1, '#f2560a');
+    zc.lineJoin = 'round'; zc.lineWidth = ref.width * 0.16; zc.strokeStyle = '#2a0c02';
+    zc.strokeText('0', z.width / 2, z.height / 2 + ref.height * 0.04);
+    zc.fillStyle = grad;
+    zc.fillText('0', z.width / 2, z.height / 2 + ref.height * 0.04);
+    glyphs[0] = z;
+    // vírgula dos centavos, no mesmo estilo, estreita e na linha de base
+    const cm = document.createElement('canvas');
+    cm.width = Math.round(ref.width * 0.42); cm.height = ref.height;
+    const cc = cm.getContext('2d');
+    cc.font = zc.font; cc.textAlign = 'center'; cc.textBaseline = 'alphabetic';
+    const g2 = cc.createLinearGradient(0, 0, 0, cm.height);
+    g2.addColorStop(0, '#ffe200'); g2.addColorStop(0.55, '#ffab12'); g2.addColorStop(1, '#f2560a');
+    cc.lineJoin = 'round'; cc.lineWidth = ref.width * 0.14; cc.strokeStyle = '#2a0c02';
+    cc.strokeText(',', cm.width / 2, cm.height * 0.86);
+    cc.fillStyle = g2;
+    cc.fillText(',', cm.width / 2, cm.height * 0.86);
+    glyphs[','] = cm;
+    if (pending !== null) show(pending);
+  };
+  img.src = '../img/jogo/digits.png';
+  // valor em reais com centavos: 12,50
+  function show(n) {
+    pending = n;
+    if (!glyphs[0] || n === shown) return;
+    shown = n;
+    const s = Math.max(0, n).toFixed(2).replace('.', ',');
+    while (box.children.length > s.length) box.lastChild.remove();
+    while (box.children.length < s.length) box.appendChild(document.createElement('canvas'));
+    [...s].forEach((d, i) => {
+      const cv = box.children[i], g = glyphs[d];
+      if (cv.dataset.d === d) return;
+      cv.dataset.d = d; cv.width = g.width; cv.height = g.height;
+      cv.getContext('2d').drawImage(g, 0, 0);
+    });
+    // muitos dígitos: diminui a altura para caber no quadro
+    const ratio = [...box.children].reduce((a, c) => a + c.width / c.height, 0) * 1.05;
+    const fit = Math.min(1, box.clientWidth / (ratio * box.clientHeight || 1));
+    for (const c of box.children) c.style.height = (fit * 100) + '%';
+  }
+  return { show };
+})();
+window.viewer.scoreboard = scoreboard;
+
+// Páginas de textura empilhadas: cada chunk tem 256 halfwords x 128 linhas (VRAM do PS1).
+const texCount = json.textures;
+const texels = new Uint16Array(bin, json.texOffset, 256 * 128 * texCount);
+const vram = new THREE.DataTexture(texels, 256, 128 * texCount, THREE.RedIntegerFormat, THREE.UnsignedShortType);
+vram.internalFormat = 'R16UI';
+vram.magFilter = vram.minFilter = THREE.NearestFilter;
+vram.needsUpdate = true;
+
+// Neblina leve (cor do céu perto do horizonte): o cenário some aos poucos entre 9 000 e 17 000 de distância, e o
+// que está além disso nem é desenhado (DESENHO_MAX). No celular, mais perto.
+const NEBLINA = { cor: new THREE.Color(0.62, 0.75, 0.87), perto: CELULAR ? 7000 : 9000, longe: CELULAR ? 13500 : 17000 };
+const DESENHO_MAX = NEBLINA.longe + 1500;
+const vertexShader = `
+  in vec4 vcol;
+  in vec2 tuv;
+  in vec4 page;   // chunk, segmento, modo de cor, clut x
+  in vec2 page2;  // clut y, modo semitransparente
+  out vec3 vColor;
+  out vec2 vUv;
+  flat out ivec4 vPage;
+  flat out ivec2 vPage2;
+  out float vWorldZ;
+  out float vFog;   // distância até a câmera (neblina)
+  void main() {
+    vColor = vcol.rgb; vUv = tuv; vPage = ivec4(page); vPage2 = ivec2(page2);
+    vWorldZ = (modelMatrix * vec4(position, 1.0)).z;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vFog = -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }`;
+
+const fragmentShader = `
+  precision highp usampler2D;
+  uniform usampler2D vram;
+  uniform bool transPass;
+  uniform float clipZ;   // modo infinito: esconde a fase original depois do ponto de troca
+  uniform vec3 fogColor; // neblina leve no horizonte: esconde o fim do cenário montado
+  uniform float fogNear, fogFar;
+  in float vFog;
+  vec3 neblina(vec3 c) { return mix(c, fogColor, smoothstep(fogNear, fogFar, vFog)); }
+  in vec3 vColor;
+  in vec2 vUv;
+  flat in ivec4 vPage;
+  flat in ivec2 vPage2;
+  in float vWorldZ;
+  out vec4 outColor;
+  void main() {
+    if (vWorldZ < clipZ) discard;
+    int chunk = vPage.x;
+    if (chunk < 0) { outColor = vec4(neblina(vColor), 1.0); return; } // polígono sem textura (POLY_G3)
+    int base = chunk * 128;
+    ivec2 t = ivec2(floor(vUv));
+    int u = t.x, v = t.y & 127, seg = vPage.y * 64, cm = vPage.z;
+    uint c;
+    if (cm == 0) {
+      uint hw = texelFetch(vram, ivec2(seg + ((u & 255) >> 2), base + v), 0).r;
+      uint idx = (hw >> uint((u & 3) * 4)) & 15u;
+      c = texelFetch(vram, ivec2(vPage.w + int(idx), base + vPage2.x), 0).r;
+    } else if (cm == 1) {
+      uint hw = texelFetch(vram, ivec2(seg + ((u & 127) >> 1), base + v), 0).r;
+      uint idx = (hw >> uint((u & 1) * 8)) & 255u;
+      c = texelFetch(vram, ivec2(min(vPage.w + int(idx), 255), base + vPage2.x), 0).r;
+    } else {
+      c = texelFetch(vram, ivec2(seg + (u & 63), base + v), 0).r;
+    }
+    if (c == 0u) discard; // preto puro = transparente no PS1
+    vec3 rgb = vec3(float(c & 31u), float((c >> 5) & 31u), float((c >> 10) & 31u)) / 31.0;
+    rgb = neblina(clamp(rgb * vColor * 2.0, 0.0, 1.0)); // cor do vértice 0x80 = intensidade normal
+    bool stp = (c & 0x8000u) != 0u;
+    int mode = vPage2.y;
+    if (!transPass || !stp) { outColor = vec4(rgb, 1.0); return; }
+    // Saída pré-multiplicada; blend = src + dst * (1 - a)
+    if (mode == 0) outColor = vec4(rgb * 0.5, 0.5);
+    else if (mode == 1) outColor = vec4(rgb, 0.0);
+    else if (mode == 3) outColor = vec4(rgb * 0.25, 0.0);
+    else outColor = vec4(0.0, 0.0, 0.0, 0.25);
+  }`;
+
+function makeGeometry(pass) {
+  const p = json.passes[pass];
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(bin, p.pos, p.count * 3).map(x => x * SCALE);
+  if (pass === 'opaque' || pass === 'trans') { // cenário (os modelos 3D e o céu não)
+    const d = descidaDe(pass);
+    for (let j = 0; j < p.count; j++) pos[j * 3 + 1] -= d[j] * SCALE;
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('vcol', new THREE.BufferAttribute(new Uint8Array(bin, p.col, p.count * 4), 4, true));
+  const info = new Int16Array(bin, p.info, p.count * 8);
+  const ib = new THREE.InterleavedBuffer(info, 8);
+  g.setAttribute('tuv', new THREE.InterleavedBufferAttribute(ib, 2, 0));
+  g.setAttribute('page', new THREE.InterleavedBufferAttribute(ib, 4, 2));
+  g.setAttribute('page2', new THREE.InterleavedBufferAttribute(ib, 2, 6));
+  return g;
+}
+function makeMaterial(trans) {
+  const m = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3, vertexShader, fragmentShader,
+    uniforms: { vram: { value: vram }, transPass: { value: trans }, clipZ: { value: -1e9 },
+      fogColor: { value: NEBLINA.cor }, fogNear: { value: NEBLINA.perto * SCALE }, fogFar: { value: NEBLINA.longe * SCALE } },
+    side: THREE.DoubleSide,
+  });
+  if (trans) {
+    m.transparent = true; m.depthWrite = false;
+    m.blending = THREE.CustomBlending;
+    m.blendSrc = THREE.OneFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor;
+  }
+  return m;
+}
+// corredor das juntas: só a frente das faces aparece (de fora, a câmera enxerga através)
+function corredorMaterial() { const m = makeMaterial(false); m.side = THREE.FrontSide; return m; }
+function makeMesh(pass, trans) {
+  const mesh = new THREE.Mesh(makeGeometry(pass), makeMaterial(trans));
+  mesh.frustumCulled = false;
+  if (trans) mesh.renderOrder = 1;
+  scene.add(mesh);
+  return mesh;
+}
+const opaque = makeMesh('opaque', false);
+const trans = makeMesh('trans', true);
+marcar('cenarioReal');
+// Céu: centralizado na câmera e desenhado antes de tudo, sem teste de profundidade.
+const sky = json.passes.sky.count ? makeMesh('sky', false) : null;
+if (sky) {
+  sky.geometry.computeBoundingBox();
+  const c = sky.geometry.boundingBox.getCenter(new THREE.Vector3());
+  sky.geometry.translate(-c.x, -c.y, -c.z);
+  sky.material.depthTest = sky.material.depthWrite = false;
+  sky.material.uniforms.fogNear.value = 1e9; sky.material.uniforms.fogFar.value = 2e9; // o céu não tem neblina
+  sky.renderOrder = -1;
+}
+
+// Entidades: o jogo usa objetos GOOL; aqui cada uma vira um marcador simples na posição inicial.
+// Categoria do GOOL: 1 = jogador, 3 = inimigo, 4 = caixa/item, 5 = objeto da fase.
+const ENT_STYLE = {
+  Will: { color: 0xff8a1f, label: 'Crash (início)', shape: 'player' },
+  Boxs: { color: 0xc8843c, label: 'Caixa', shape: 'box' },
+  Crab: { color: 0xe23b3b, label: 'Caranguejo', shape: 'enemy' },
+  Turt: { color: 0x3bb54a, label: 'Tartaruga', shape: 'enemy' },
+  Warp: { color: 0xa45cff, label: 'Saída da fase', shape: 'warp' },
+  JunO: { color: 0x45c4b0, label: 'Objeto da selva', shape: 'object' },
+  BeaO: { color: 0xf2d16b, label: 'Objeto da praia', shape: 'object' },
+};
+const BOX = 400 * SCALE; // pilhas de caixas no jogo estão espaçadas 400 unidades
+const entGroup = new THREE.Group();
+scene.add(entGroup);
+const pickables = [];
+const geoms = {
+  box: new THREE.BoxGeometry(BOX, BOX, BOX),
+  enemy: new THREE.ConeGeometry(BOX * 0.45, BOX * 1.1, 12),
+  player: new THREE.CapsuleGeometry(BOX * 0.3, BOX * 0.6, 4, 10),
+  object: new THREE.SphereGeometry(BOX * 0.3, 12, 8),
+  warp: new THREE.TorusGeometry(BOX * 0.6, BOX * 0.12, 8, 24),
+};
+const modelMaterial = makeMaterial(false);
+const modelCache = {};
+const modelGeometry = key => modelCache[key] || (modelCache[key] = makeGeometry('model:' + key));
+
+// Animações: cada quadro tem só posições e cores; UVs e páginas vêm do quadro 0 (mesma topologia).
+const frameCache = {};
+function animFrames(key) {
+  if (frameCache[key]) return frameCache[key];
+  const count = json.passes['model:' + key].count;
+  return (frameCache[key] = json.anims[key].map(f => ({
+    pos: new THREE.BufferAttribute(new Float32Array(bin, f.pos, count * 3).map(x => x * SCALE), 3),
+    col: new THREE.BufferAttribute(new Uint8Array(bin, f.col, count * 4), 4, true),
+  })));
+}
+// Geometria própria por entidade (para trocar de quadro), compartilhando os atributos estáticos.
+function animatedGeometry(key) {
+  const base = modelGeometry(key), g = new THREE.BufferGeometry();
+  for (const n of ['tuv', 'page', 'page2']) g.setAttribute(n, base.getAttribute(n));
+  const f = animFrames(key)[0];
+  g.setAttribute('position', f.pos);
+  g.setAttribute('vcol', f.col);
+  return g;
+}
+const ANIM_FPS = 30; // o jogo roda a 30 quadros por segundo
+// Inimigos patrulham o caminho indo e voltando (unidades do jogo por segundo; estimado).
+const PATROL_SPEED = { Crab: 700, Turt: 450 };
+const FACES_PATH = { Turt: true }; // caranguejos andam de lado, sempre de frente para o jogador
+const animated = [];
+window.viewer.animated = animated;
+Object.assign(window.viewer, { animatedGeometry, animFrames, modelMaterial });
+const counts = {};
+const boxes = [];
+const pathLines = new THREE.Group(); // caminhos de patrulha: só na câmera livre
+pathLines.visible = false;
+entGroup.add(pathLines);
+for (const e of json.entities) {
+  if (e.gool === 'Will') continue; // o Crash agora é o jogador
+  // inimigos: criados pela simulação (mundo.js); caixas: não existem no modo infinito
+  if (e.gool === 'Crab' || e.gool === 'Turt' || e.gool === 'Boxs') continue;
+  const st = ENT_STYLE[e.gool] || { color: 0xffffff, label: e.gool, shape: 'object' };
+  const caminho = e.path.map(p => [p[0], p[1] - alturaChao(p[0], p[2]), p[2]]); // mapa plano
+  const [x, y, z] = caminho[0].map(v => v * SCALE);
+  let m;
+  if (e.model) { // modelo 3D do jogo
+    const frames = animFrames(e.model).length;
+    const moving = PATROL_SPEED[e.gool] && e.path.length > 1;
+    m = new THREE.Mesh(frames > 1 && e.gool !== 'Boxs' ? animatedGeometry(e.model) : modelGeometry(e.model), modelMaterial);
+    m.frustumCulled = false;
+    m.position.set(x, y, z);
+    m.rotation.y = -e.rot / 4096 * Math.PI * 2;
+    const isEnemy = e.gool === 'Crab' || e.gool === 'Turt'; // controlados por enemies.js (GOOL)
+    if (!isEnemy && ((frames > 1 && e.gool !== 'Boxs') || moving)) {
+      // comprimento acumulado do caminho, para andar com velocidade constante
+      const pts = caminho.map(p => new THREE.Vector3(p[0] * SCALE, p[1] * SCALE, p[2] * SCALE));
+      const dist = [0];
+      for (let i = 1; i < pts.length; i++) dist.push(dist[i - 1] + pts[i].distanceTo(pts[i - 1]));
+      animated.push({ mesh: m, key: e.model, frames, phase: Math.random() * frames, moving, pts, dist,
+        speed: (PATROL_SPEED[e.gool] || 0) * SCALE, facesPath: !!FACES_PATH[e.gool], offset: Math.random() * dist[dist.length - 1], lastFrame: 0 });
+    }
+  } else {
+    const mat = new THREE.MeshBasicMaterial({ color: st.color, transparent: true, opacity: 0.85 });
+    m = new THREE.Mesh(geoms[st.shape], mat);
+    m.position.set(x, y + (st.shape === 'warp' ? BOX : BOX / 2), z);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geoms[st.shape]), new THREE.LineBasicMaterial({ color: 0x000000 })));
+  }
+  m.userData.text = e.label ? `${e.label} · subtipo ${e.sub}` : `${st.label}${e.sub ? ' · subtipo ' + e.sub : ''}`;
+  m.userData.text += ` · id ${e.id} · zona ${e.zone}${e.path.length > 1 ? ' · caminho de ' + e.path.length + ' pontos' : ''}`;
+  entGroup.add(m);
+  pickables.push(m);
+  if (e.path.length > 1) { // objetos que se movem seguem esse caminho
+    const pts = caminho.map(p => new THREE.Vector3(p[0] * SCALE, p[1] * SCALE + BOX / 2, p[2] * SCALE));
+    pathLines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: st.color })));
+  }
+  const key = e.label || st.label;
+  counts[key] = counts[key] || { n: 0, color: st.color };
+  if (st.shape === 'box') counts[key].color = 0xc8843c;
+  counts[key].n++;
+}
+// Galeria: todos os modelos de caixa lado a lado, perto do início, para identificar os subtipos.
+const galleryGroup = new THREE.Group();
+galleryGroup.visible = false;
+scene.add(galleryGroup);
+{
+  const crash = json.entities.find(e => e.gool === 'Will');
+  const [x, y, z] = crash.path[0].map(v => v * SCALE);
+  json.gallery.forEach((key, i) => {
+    const m = new THREE.Mesh(modelGeometry(key), modelMaterial);
+    m.position.set(x + (i - json.gallery.length / 2) * BOX * 1.6, y + BOX * 3, z - BOX * 4);
+    m.userData.text = 'Galeria · ' + key.split(':')[0];
+    galleryGroup.add(m);
+    pickables.push(m);
+  });
+}
+document.getElementById('gallery').onchange = e => { galleryGroup.visible = e.target.checked; };
+
+// Colisão (octree das zonas) e visualização de depuração: uma caixa por folha sólida.
+const collision = nivel.collision;
+window.viewer.collision = collision;
+const colGroup = new THREE.Group();
+colGroup.visible = false;
+scene.add(colGroup);
+function buildCollisionView() {
+  colGroup.clear();
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  const byValue = new Map();
+  for (const zn of collision.zones) collision.forEachSolid(zn, (v, x, y, z, w, h, d) => {
+    if (!byValue.has(v)) byValue.set(v, []);
+    byValue.get(v).push([x, y, z, w, h, d]);
+  });
+  for (const [v, cells] of byValue) {
+    const color = new THREE.Color().setHSL(((v * 0.6180339) % 1), 0.8, 0.55);
+    const mesh = new THREE.InstancedMesh(unit, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false }), cells.length);
+    const mtx = new THREE.Matrix4();
+    cells.forEach(([x, y, z, w, h, d], i) => {
+      mtx.makeScale(w * SCALE, h * SCALE, d * SCALE).setPosition((x + w / 2) * SCALE, (y + h / 2) * SCALE, (z + d / 2) * SCALE);
+      mesh.setMatrixAt(i, mtx);
+    });
+    mesh.userData.value = v;
+    colGroup.add(mesh);
+  }
+}
+window.viewer.buildCollisionView = buildCollisionView;
+document.getElementById('colview').onchange = e => { if (e.target.checked && !colGroup.children.length) buildCollisionView(); colGroup.visible = e.target.checked; };
+
+document.getElementById('legend').innerHTML = Object.entries(counts).sort((a, b) => b[1].n - a[1].n)
+  .map(([k, v]) => `<div><i style="background:#${v.color.toString(16).padStart(6, '0')}"></i>${k}: ${v.n}</div>`).join('');
+document.getElementById('ents').onchange = e => { entGroup.visible = e.target.checked; };
+
+// Nome da entidade ao passar o mouse
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2(), tip = document.getElementById('tip');
+renderer.domElement.addEventListener('pointermove', e => {
+  if (dragging) { tip.style.display = 'none'; return; }
+  mouse.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(pickables, false).find(h => h.object.parent.visible);
+  if (!hit) { tip.style.display = 'none'; return; }
+  tip.textContent = hit.object.userData.text;
+  tip.style.display = 'block';
+  tip.style.left = e.clientX + 14 + 'px';
+  tip.style.top = e.clientY + 14 + 'px';
+});
+
+document.getElementById('stats').textContent =
+  `${json.zones.length} zonas · ${(json.passes.opaque.count + json.passes.trans.count + json.passes.sky.count) / 3} triângulos · ${texCount} páginas de textura · ${json.entities.length} entidades`;
+document.getElementById('wire').onchange = e => { opaque.material.wireframe = trans.material.wireframe = e.target.checked; };
+document.getElementById('trans').onchange = e => { trans.visible = e.target.checked; };
+
+function goTo(z) {
+  const b = z.bounds.map(v => v * SCALE);
+  const c = new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
+  const size = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+  camera.position.set(c.x, c.y + size * 0.2, c.z + size * 0.55);
+  camera.rotation.set(-0.3, 0, 0);
+}
+const zonesEl = document.getElementById('zones');
+const sorted = json.zones.filter(z => !z.name.startsWith('s')).sort((a, b) => b.bounds[2] - a.bounds[2]);
+for (const z of sorted) {
+  const btn = document.createElement('button');
+  btn.textContent = z.name;
+  btn.onclick = () => goTo(z);
+  zonesEl.appendChild(btn);
+}
+const crash = json.entities.find(e => e.gool === 'Will');
+if (crash) {
+  const [x, y, z] = crash.path[0].map(v => v * SCALE);
+  camera.position.set(x, y + 9, z + 16);
+  camera.rotation.set(-0.4, 0, 0);
+} else goTo(sorted[0]);
+
+// Jogador
+function makePlayerMesh(key) {
+  const m = new THREE.Mesh(animatedGeometry(key), modelMaterial);
+  m.frustumCulled = false;
+  const frames = animFrames(key);
+  m.userData.frames = frames.length;
+  let last = -1;
+  m.userData.setFrame = f => {
+    if (f === last) return;
+    m.geometry.setAttribute('position', frames[f].pos);
+    m.geometry.setAttribute('vcol', frames[f].col);
+    last = f;
+  };
+  return m;
+}
+// Comportamento por subtipo de caixa (ver BOX_MODELS em tools/export.js).
+const BOX_KIND = { 0: 'break', 2: 'break', 6: 'break', 8: 'break', 9: 'break', 10: 'break', 17: 'break', 20: 'break',
+  4: 'checkpoint', 3: 'arrow', 5: 'iron', 7: 'iron', 13: 'ghost' };
+// O que cada caixa dá (comportamento conhecido do Crash 1; os valores não foram lidos do GOOL):
+// comum = 1 fruta; "?" = de 1 a 5 frutas; ripada = 1 fruta por quique; vida extra; Aku Aku = máscara.
+const BOX_LOOT = { 2: 'fruit', 20: 'fruit', 10: 'question', 17: 'question', 6: 'multi', 8: 'life', 9: 'aku' };
+for (const b of boxes) { b.kind = BOX_KIND[b.sub] || 'break'; b.loot = BOX_LOOT[b.sub] || null; }
+let broken = 0, deaths = 0;
+const START_LIVES = 1; // pedido: uma vida só (frutas e caixas de vida não dão vidas extras)
+let fruit = 0, lives = START_LIVES, levelTime = 0, finished = false;
+// A corrida (física, inimigos, trilha, frutas) é simulada em mundo.js, o mesmo código que o servidor usa para
+// refazer a corrida; aqui ficam só os ganchos que desenham, tocam som e atualizam a placa.
+const mundo = criarMundo(nivel, {
+  config, semente: partida.semente,
+  visual: {
+    cena: scene,
+    // sem o corte de clipZ: cenário, semitransparentes, saia, portal, fundo, mata e mata semitransparente
+    materiais: [makeMaterial(false), makeMaterial(true), makeMaterial(false), corredorMaterial(), makeMaterial(false), makeMaterial(false), makeMaterial(true)],
+    jogadorMesh: makePlayerMesh,
+    animatedGeometry, animFrames,
+    som: nome => playSound(nome),
+    inimigoMesh(kind, ent) {
+      const m = new THREE.Mesh(animatedGeometry(kind === 'Crab' ? 'Cr19V' : 'Tu19V'), modelMaterial);
+      m.frustumCulled = false;
+      if (ent) {
+        m.position.set(ent.path[0][0] * SCALE, ent.path[0][1] * SCALE, ent.path[0][2] * SCALE);
+        m.rotation.y = -ent.rot / 4096 * Math.PI * 2;
+      }
+      entGroup.add(m);
+      return m;
+    },
+    removerMesh(m) { entGroup.remove(m); },
+    decoracao(key) {
+      if (!key || !json.passes['model:' + key]) return null;
+      const m = new THREE.Mesh(modelGeometry(key), modelMaterial);
+      m.frustumCulled = false;
+      return m;
+    },
+    fruta(f) {
+      const m = makeFruitMesh();
+      m.position.set(f.x * SCALE, f.y * SCALE, f.z * SCALE);
+      scene.add(m);
+      return m;
+    },
+    removerFruta(f) { if (f.visual) { scene.remove(f.visual); f.visual.geometry.dispose(); } },
+    coletou(f) {
+      if (f.visual) {
+        scene.remove(f.visual);
+        // voa um pouco e some, como as frutas das caixas
+        const m = makeFruitMesh();
+        m.position.copy(f.visual.position);
+        scene.add(m);
+        flyingFruit.push({ m, t: 0.3, vx: 0, vz: 0, vy: 5, phase: f.phase });
+      }
+      playSound('frt0A');
+      addFruit(1);
+    },
+    matou() { killed++; session.inimigos++; updateScore(); },
+    morreu() {
+      deaths++; session.mortes++;
+      lives--;
+      updateScore();
+      // fim de jogo só depois da animação de morte (antes do renascimento)
+      if (lives <= 0) setTimeout(gameOver, Math.max(900, player.deadTimer * 1000 - 150));
+    },
+  },
+});
+const player = mundo.player, enemies = mundo.enemies, pickups = mundo.pickups;
+// Placar: esta partida (desde que a página abriu) e a sessão (soma de todas as partidas nesta aba,
+// guardada no sessionStorage; volta a zero ao fechar a aba).
+let killed = 0;
+const SESSION_KEY = 'crash1-sessao';
+let session = { caixas: 0, inimigos: 0, mortes: 0, partidas: 0 };
+try { session = { ...session, ...JSON.parse(sessionStorage.getItem(SESSION_KEY) || '{}') }; } catch {}
+session.partidas++;
+function saveSession() { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {} }
+saveSession();
+player.onMask = () => updateScore();
+
+// Efeitos sonoros: sons do próprio jogo (entries ADIO decodificadas para WAV pelo exportador).
+// O navegador só libera áudio depois de uma tecla/clique; a partir daí os sons são carregados e tocados.
+// Variação de tom como no GOOL do Crash (RND 204 + 921 → pitch 921–1125 de 1024 ≈ 0,9–1,1).
+const SFX_PITCH = { ds10A: [0.72, 0.83] };            // RND 114 + 737
+const SFX_VOLUME = { fs00A: 0.45, fs10A: 0.45 };
+const audio = { ctx: null, buffers: {}, loading: {} };
+// Música de fundo: as faixas de audio/musica tocam em sequência, sem parar (com uma faixa só, ela repete).
+// Começa junto com o áudio (primeira tecla ou clique) e para no fim de jogo.
+const MUSIC = ['../audio/musica/n-sanity-beach.mp3'];
+const MUSIC_VOLUME = 0.4;
+const music = { el: null, index: 0 };
+function startMusic() {
+  if (music.el || !MUSIC.length) return;
+  const el = music.el = new Audio(MUSIC[0]);
+  el.volume = MUSIC_VOLUME;
+  el.loop = MUSIC.length === 1;
+  el.addEventListener('ended', () => {
+    music.index = (music.index + 1) % MUSIC.length;
+    el.src = MUSIC[music.index];
+    el.play().catch(() => {});
+  });
+  el.play().catch(() => { music.el = null; }); // bloqueado: tenta de novo na próxima tecla
+}
+function stopMusic() {
+  const el = music.el;
+  if (!el) return;
+  // some aos poucos em ~1,5 s
+  const fade = setInterval(() => {
+    el.volume = Math.max(0, el.volume - MUSIC_VOLUME / 15);
+    if (el.volume <= 0) { clearInterval(fade); el.pause(); }
+  }, 100);
+}
+window.viewer.music = music;
+function enableAudio() {
+  if (!gameIsOver) startMusic();
+  if (!audio.ctx) {
+    try { audio.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return; }
+    for (const n of ['jmp0A', 'spn0A', 'fs00A', 'fs10A', 'fal0A', 'arg0A', 'ds10A', 'd1a0A', 'd1b0A', 'frt0A']) loadSound(n);
+  }
+  if (audio.ctx.state === 'suspended') audio.ctx.resume();
+}
+function loadSound(name) {
+  if (!audio.ctx || audio.loading[name] || !json.sfx || !json.sfx[name]) return;
+  audio.loading[name] = fetch('../audio/' + json.sfx[name].file).then(r => r.arrayBuffer())
+    .then(b => audio.ctx.decodeAudioData(b)).then(buf => { audio.buffers[name] = buf; }).catch(() => {});
+}
+function playSound(name) {
+  if (!audio.ctx) return;
+  const buf = audio.buffers[name];
+  if (!buf) { loadSound(name); return; }
+  const src = audio.ctx.createBufferSource();
+  src.buffer = buf;
+  const [lo, hi] = SFX_PITCH[name] || [0.9, 1.1];
+  src.playbackRate.value = lo + Math.random() * (hi - lo);
+  const gain = audio.ctx.createGain();
+  gain.gain.value = SFX_VOLUME[name] ?? 0.8;
+  src.connect(gain).connect(audio.ctx.destination);
+  src.start();
+}
+addEventListener('pointerdown', enableAudio);
+window.viewer.playSound = playSound;
+scene.add(player.group);
+
+// Frutas Wumpa: sprite de 14 quadros do FruiC (página WillT). Saem da caixa, sobem e somem;
+// cada 100 frutas viram uma vida.
+const FRUIT_SIZE = 90 * SCALE;
+const flyingFruit = [];
+function makeFruitMesh() {
+  const g = new THREE.BufferGeometry();
+  const s = FRUIT_SIZE;
+  // cantos na ordem do POLY_FT4: cima-esq., cima-dir., baixo-esq., baixo-dir.; dois triângulos
+  const corners = [[-s, s], [s, s], [-s, -s], [s, -s]], tri = [0, 1, 2, 1, 3, 2];
+  g.setAttribute('position', new THREE.Float32BufferAttribute(tri.flatMap(i => [corners[i][0], corners[i][1], 0]), 3));
+  g.setAttribute('vcol', new THREE.Float32BufferAttribute(tri.flatMap(() => [0.5, 0.5, 0.5, 1]), 4));
+  g.setAttribute('tuv', new THREE.Float32BufferAttribute(new Float32Array(12), 2));
+  g.setAttribute('page', new THREE.Float32BufferAttribute(new Float32Array(24), 4));
+  g.setAttribute('page2', new THREE.Float32BufferAttribute(new Float32Array(12), 2));
+  const m = new THREE.Mesh(g, modelMaterial);
+  m.frustumCulled = false;
+  m.userData.tri = tri;
+  return m;
+}
+function setFruitFrame(m, f) {
+  const fr = json.sprites.fruit.frames[f % json.sprites.fruit.frames.length];
+  const g = m.geometry, tri = m.userData.tri;
+  tri.forEach((c, k) => {
+    g.attributes.tuv.setXY(k, fr.uv[c][0], fr.uv[c][1]);
+    g.attributes.page.setXYZW(k, fr.page[0], fr.page[1], fr.page[2], fr.page[3]);
+    g.attributes.page2.setXY(k, fr.page[4], fr.page[5]);
+  });
+  g.attributes.tuv.needsUpdate = g.attributes.page.needsUpdate = g.attributes.page2.needsUpdate = true;
+}
+function spawnFruit(b, n) {
+  for (let i = 0; i < n; i++) {
+    const m = makeFruitMesh();
+    m.position.set(b.x * SCALE, (b.y + BOX_UNITS * 0.6) * SCALE, b.z * SCALE);
+    scene.add(m);
+    const a = Math.random() * Math.PI * 2;
+    flyingFruit.push({ m, t: 0, vx: Math.cos(a) * 1.5, vz: Math.sin(a) * 1.5, vy: 6 + Math.random() * 2, phase: Math.floor(Math.random() * 14) });
+    addFruit(1);
+  }
+}
+function updateFruit(dt) {
+  for (let i = flyingFruit.length - 1; i >= 0; i--) {
+    const f = flyingFruit[i];
+    f.t += dt;
+    f.m.position.x += f.vx * dt; f.m.position.z += f.vz * dt; f.m.position.y += f.vy * dt;
+    f.vy -= 14 * dt;
+    f.m.scale.setScalar(Math.max(0.01, 1 - Math.max(0, f.t - 0.45) / 0.25));
+    f.m.quaternion.copy(camera.quaternion); // sempre de frente para a câmera
+    setFruitFrame(f.m, Math.floor(f.t * 30) + f.phase);
+    if (f.t > 0.7) { scene.remove(f.m); f.m.geometry.dispose(); flyingFruit.splice(i, 1); }
+  }
+}
+// Frutas soltas na trilha (fase infinita): giram no lugar; quem decide se o Crash pegou é a simulação.
+function updatePickups(dt, time) {
+  for (const f of pickups) {
+    if (!f.alive || !f.visual) continue;
+    f.visual.quaternion.copy(camera.quaternion);
+    setFruitFrame(f.visual, Math.floor(time * 30) + f.phase);
+  }
+}
+function addFruit(n) {
+  fruit = mundo.estado.frutas;
+  enviarProgresso(); // se a página fechar, o servidor refaz a corrida com o que já recebeu
+  if (loopMode) computeScore(); // os pontos vêm só das frutas: atualiza na hora
+  updateScore();
+}
+function addLife() {} // uma vida só: vidas extras desligadas
+function giveLoot(b) {
+  if (b.loot === 'fruit') spawnFruit(b, 1);
+  else if (b.loot === 'question') spawnFruit(b, 1 + Math.floor(Math.random() * 5));
+  else if (b.loot === 'multi') spawnFruit(b, 1);
+  else if (b.loot === 'life') { addLife(); updateScore(); }
+  else if (b.loot === 'aku') player.addMask();
+}
+const BOX_UNITS = 400;
+function flash(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+
+// Máscara do Aku Aku (modelo WD10V do DoctC): flutua ao lado do Crash enquanto ele tem proteção.
+const aku = json.akuModel ? new THREE.Mesh(modelGeometry(json.akuModel), modelMaterial) : null;
+if (aku) { aku.frustumCulled = false; aku.visible = false; scene.add(aku); }
+function updateAku(t) {
+  if (!aku) return;
+  aku.visible = player.mask > 0 && player.group.visible;
+  if (!aku.visible) return;
+  const p = player.group.position, f = player.drawFacing ?? player.facing;
+  const side = 260 * SCALE, up = (520 + Math.sin(t * 3) * 40) * SCALE;
+  aku.position.set(p.x + Math.cos(f) * side, p.y + up, p.z - Math.sin(f) * side);
+  aku.rotation.y = f;
+  aku.scale.setScalar(player.mask >= 2 ? 1.25 : 1);
+}
+
+// Fim da fase: chegar na saída (WarpC) mostra o resumo.
+const warp = json.entities.find(e => e.gool === 'Warp');
+// ---- Modo infinito: do início da praia até z 113 000 é a fase original; dali em diante, trechos reais
+// sorteados (mundo.js). O antigo modo "fase" (?modo=fase) saiu: a plataforma só usa o infinito.
+const loopMode = true;
+let autoRun = true, score = 0, runStarted = false;
+const RECORD_KEY = 'crash1-recorde';
+let record = 0;
+try { record = +(localStorage.getItem(RECORD_KEY) || 0); } catch {}
+// Distância e velocidade vêm da simulação (velocidade: speedStart, +speedGain a cada 100 m, até speedMax).
+const distanciaAtual = () => mundo.estado.distancia;
+const speedMul = () => mundo.speedMul();
+const deposited = partida.entrada / 100; // entrada da partida (moedas; R$ 1 = 1 moeda)
+// R$ 1.234,56
+const brl = v => 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+// Saldo (em reais): o Crash começa sem nada; cada fruta devolve fruitPercent % do valor depositado
+// (/configuracoes). Conta em centavos para não acumular erro de arredondamento.
+const fruitCents = () => Math.round(deposited * config.fruitPercent); // = depositado × % / 100, em centavos
+function computeScore() {
+  score = fruit * fruitCents() / 100;
+  if (score > record) { record = score; try { localStorage.setItem(RECORD_KEY, String(record)); } catch {} }
+}
+
+const track = mundo.track;
+{
+  // esconde o cenário e os objetos da fase original depois do ponto de troca (dali vêm os trechos sorteados)
+  for (const mesh of [opaque, trans]) mesh.material.uniforms.clipZ.value = LOOP_END_Z * SCALE;
+  for (const o of entGroup.children) if (o.isMesh && o.position.z < LOOP_END_Z * SCALE && !enemies.some(e => e.mesh === o)) o.visible = false;
+  const { trailAt, seamY } = nivel;
+
+  // Recorta o cenário de cada trecho em geometrias próprias, cortando os triângulos exatamente nos planos da
+  // emenda (z = zA e z = zB): um trecho termina onde o seguinte começa, sem pedaços de um entrando no outro
+  // (blocos, grama e areia sobrepostos). A fresta que sobra é coberta pelo chão de terra, pela saia e pelo portal.
+  function subsetGeometry(pass, zA, zB, cx, area = null) {
+    const p = json.passes[pass], n = p.count;
+    const pos = new Float32Array(bin, p.pos, n * 3), col = new Uint8Array(bin, p.col, n * 4), inf = new Int16Array(bin, p.info, n * 8);
+    const Pl = [], Cl = [], Il = [], Dl = [], desc = descidaDe(pass);
+    const vert = j => ({ p: [pos[j * 3], pos[j * 3 + 1], pos[j * 3 + 2]], c: Array.from(col.subarray(j * 4, j * 4 + 4)), f: Array.from(inf.subarray(j * 8, j * 8 + 8)), dy: desc[j] });
+    const mix = (a, b, t) => ({
+      p: a.p.map((v, k) => v + (b.p[k] - v) * t),
+      c: a.c.map((v, k) => Math.round(v + (b.c[k] - v) * t)),
+      f: a.f.map((v, k) => (k < 2 ? Math.round(v + (b.f[k] - v) * t) : v)), // coordenada de textura; página fica
+      dy: NaN, // vértice novo (no corte): calcula depois
+    });
+    // Sutherland–Hodgman contra um plano em z: fica o lado em que dentro(z) é verdadeiro
+    const cortar = (poli, zc, dentro) => {
+      const out = [];
+      for (let k = 0; k < poli.length; k++) {
+        const a = poli[k], b = poli[(k + 1) % poli.length], ia = dentro(a.p[2]), ib = dentro(b.p[2]);
+        if (ia) out.push(a);
+        if (ia !== ib) out.push(mix(a, b, (zc - a.p[2]) / (b.p[2] - a.p[2])));
+      }
+      return out;
+    };
+    const emitir = v => {
+      for (let c = 0; c < 3; c++) Pl.push(v.p[c] * SCALE);
+      Cl.push(...v.c); Il.push(...v.f); Dl.push(v.dy);
+    };
+    for (let i = 0; i < n; i += 3) {
+      const xc = (pos[i * 3] + pos[i * 3 + 3] + pos[i * 3 + 6]) / 3;
+      if (Math.abs(xc - cx) >= 8000) continue; // largo: rochas e copas laterais entram
+      const z0 = pos[i * 3 + 2], z1 = pos[i * 3 + 5], z2 = pos[i * 3 + 8];
+      const zMin = Math.min(z0, z1, z2), zMax = Math.max(z0, z1, z2);
+      if (zMax < zB || zMin > zA) continue;
+      // corredor da junta (área): o chão original dentro dele sai (a laje fica no lugar); paredes, rochas e o
+      // resto ficam. Triângulo de chão que cruza a saída do corredor fica só com a parte de fora.
+      if (area) {
+        const yf0 = pos[i * 3 + 1] - desc[i], yf1 = pos[i * 3 + 4] - desc[i + 1], yf2 = pos[i * 3 + 7] - desc[i + 2];
+        const zc = (z0 + z1 + z2) / 3;
+        if (Math.max(yf0, yf1, yf2) < 220 && Math.min(yf0, yf1, yf2) > -220 && Math.abs(xc - area.cx(zc)) < area.half && zMax > area.zSaida) {
+          if (zMin >= area.zSaida) continue; // inteiro dentro do corredor
+          let poli = [vert(i), vert(i + 1), vert(i + 2)];
+          poli = cortar(poli, area.zSaida, z => z <= area.zSaida);
+          poli = cortar(poli, zB, z => z >= zB);
+          for (let k = 1; k + 1 < poli.length; k++) { emitir(poli[0]); emitir(poli[k]); emitir(poli[k + 1]); }
+          continue;
+        }
+      }
+      if (zMin >= zB && zMax <= zA) { // inteiro dentro: copia direto (sem objetos; é a grande maioria)
+        for (let j = i; j < i + 3; j++) {
+          Pl.push(pos[j * 3] * SCALE, pos[j * 3 + 1] * SCALE, pos[j * 3 + 2] * SCALE);
+          for (let c = 0; c < 4; c++) Cl.push(col[j * 4 + c]);
+          for (let c = 0; c < 8; c++) Il.push(inf[j * 8 + c]);
+          Dl.push(desc[j]);
+        }
+        continue;
+      }
+      let poli = [vert(i), vert(i + 1), vert(i + 2)];
+      poli = cortar(poli, zA, z => z <= zA);
+      poli = cortar(poli, zB, z => z >= zB);
+      for (let k = 1; k + 1 < poli.length; k++) { emitir(poli[0]); emitir(poli[k]); emitir(poli[k + 1]); } // leque
+    }
+    const P = new Float32Array(Pl), Cc = new Uint8Array(Cl), I = new Int16Array(Il);
+    for (let k = 0; k < Dl.length; k++) {
+      const dy = Number.isNaN(Dl[k]) ? descidaVertice(P[k * 3] / SCALE, P[k * 3 + 1] / SCALE, P[k * 3 + 2] / SCALE) : Dl[k];
+      P[k * 3 + 1] -= dy * SCALE;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    g.setAttribute('vcol', new THREE.BufferAttribute(Cc, 4, true));
+    const ib = new THREE.InterleavedBuffer(I, 8);
+    g.setAttribute('tuv', new THREE.InterleavedBufferAttribute(ib, 2, 0));
+    g.setAttribute('page', new THREE.InterleavedBufferAttribute(ib, 4, 2));
+    g.setAttribute('page2', new THREE.InterleavedBufferAttribute(ib, 2, 6));
+    return g;
+  }
+  // "Saia" nas pontas de um trecho: faixa vertical que segue a altura do chão ao longo da largura (medida na
+  // colisão) e desce 1 500, com a textura de terra/areia do cenário. Fecha as frestas de céu que aparecem
+  // quando, numa lateral, o chão de um trecho fica um pouco mais alto que o do vizinho.
+  function skirtGeometry(cut, cxA, yA, cxB, yB) {
+    const tile = json.procTiles.ground[0];
+    const pos = [], col = [], tuv = [], page = [], page2 = [];
+    const quad = (p, shade) => {
+      const [u0, v0, u1, v1] = [tile.rect[0], tile.rect[1], tile.rect[2] + 0.99, tile.rect[3] + 0.99];
+      const uv = [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
+      for (const i of [0, 1, 2, 1, 3, 2]) {
+        pos.push(p[i][0] * SCALE, p[i][1] * SCALE, p[i][2] * SCALE);
+        col.push(shade, shade, shade, 1);
+        tuv.push(uv[i][0], uv[i][1]);
+        page.push(tile.page[0], tile.page[1], tile.page[2], tile.page[3]);
+        page2.push(tile.page[4], -1);
+      }
+    };
+    for (const [z, cx, y, inward] of [[cut.zA, cxA, yA, -40], [cut.zB, cxB, yB, 40]]) {
+      let prev = null;
+      for (let x = cx - 2600; x <= cx + 2600; x += 100) {
+        const top = nivel.groundTop(x, z + inward, y + 300);
+        // mapa plano: a saia é montada já na altura achatada do chão (medida no mesmo ponto)
+        // só no chão da trilha (plano, perto de y = 0): em cima dos barrancos a saia ficaria flutuando
+        const plano = top - alturaChao(x, z + inward);
+        const cur = top > y - 900 && Math.abs(plano) < 150 ? { x, top: plano } : null;
+        // um pouco abaixo do topo (−4) para não brigar com o chão, e escura como a lateral de um barranco
+        if (prev && cur) quad([[prev.x, prev.top - 20, z], [cur.x, cur.top - 20, z], [prev.x, Math.min(prev.top, cur.top) - 1500, z], [cur.x, Math.min(prev.top, cur.top) - 1500, z]], 0.2);
+        prev = cur;
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('vcol', new THREE.Float32BufferAttribute(col, 4));
+    g.setAttribute('tuv', new THREE.Float32BufferAttribute(tuv, 2));
+    g.setAttribute('page', new THREE.Float32BufferAttribute(page, 4));
+    g.setAttribute('page2', new THREE.Float32BufferAttribute(page2, 2));
+    return g;
+  }
+  // Junta dos trechos: um corredor de pedra curto no começo de cada trecho, já no espaço plano.
+  //  - fachada na linha da emenda (paredão largo com a passagem): esconde onde as paredes, rochas e copas do
+  //    trecho anterior terminam e as do novo começam;
+  //  - paredes altas dos dois lados ao longo de CORREDOR.comp: dentro do corredor só aparece o trecho novo;
+  //  - piso de laje: a troca de chão (areia, grama, pedra) vira a soleira da passagem;
+  //  - fachada de saída, que emoldura a volta ao cenário.
+  // Paredes e fachadas só são vistas por dentro / de frente (material de um lado só): se a câmera estiver do lado
+  // de fora, enxerga através e nunca esconde o Crash. Sem colisão (a guia cuida do caminho). Os trechos sempre
+  // começam em chão firme (1 500 sem buraco), então o corredor nunca fica em cima de um buraco.
+  const CORREDOR = { comp: 1400, folga: 260, alto: 4200, abaixo: 700, lado: 8000, fachAlto: 7000, fachAbaixo: 3000, vao: 3400, laje: 6, seg: 200 };
+  function areaCorredor(t) {
+    let half = 0;
+    for (let z = t.zA; z >= t.zA - CORREDOR.comp; z -= 100) { const g = nivel.guideLocal(z); if (g) half = Math.max(half, g.half); }
+    return { half: Math.max(900, half + CORREDOR.folga), cx: z => (trailAt(z) || trailAt(t.zA)).cx, zA: t.zA, zSaida: t.zA - CORREDOR.comp };
+  }
+  function corredorGeometry(t) {
+    const pos = [], col = [], tuv = [], page = [], page2 = [];
+    const T = 400; // um ladrilho a cada 400 unidades
+    const face = (tile, p0, du, dv, nu, nv, shade) => {
+      // grade nu × nv de ladrilhos a partir de p0; a frente (lado visível) é a de normal du × dv
+      const [u0, v0, u1, v1] = [tile.rect[0], tile.rect[1], tile.rect[2] + 0.99, tile.rect[3] + 0.99];
+      const uv = [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        const c = k => [p0[k] + du[k] * i + dv[k] * j, p0[k] + du[k] * (i + 1) + dv[k] * j, p0[k] + du[k] * i + dv[k] * (j + 1), p0[k] + du[k] * (i + 1) + dv[k] * (j + 1)];
+        const X = c(0), Y = c(1), Z = c(2);
+        for (const q of [0, 1, 2, 1, 3, 2]) {
+          pos.push(X[q] * SCALE, Y[q] * SCALE, Z[q] * SCALE);
+          col.push(shade, shade, shade, 1);
+          tuv.push(uv[q][0], uv[q][1]);
+          page.push(tile.page[0], tile.page[1], tile.page[2], tile.page[3]);
+          page2.push(tile.page[4], -1);
+        }
+      }
+    };
+    const n = len => Math.max(1, Math.round(Math.abs(len) / T));
+    const pedra = json.procTiles.wall, laje = json.procTiles.wall[2 % json.procTiles.wall.length];
+    const area = areaCorredor(t), half = area.half, cxEm = area.cx;
+    const yLaje = CORREDOR.laje; // o chão original dentro do corredor foi tirado (subsetGeometry), então a laje fica rente
+    // paredes e piso, em segmentos que seguem o centro da trilha
+    let k = 0;
+    for (let z0 = t.zA; z0 > t.zA - CORREDOR.comp; z0 -= CORREDOR.seg, k++) {
+      const z1 = Math.max(t.zA - CORREDOR.comp, z0 - CORREDOR.seg), L = z0 - z1, cx = cxEm((z0 + z1) / 2);
+      const h = CORREDOR.alto + CORREDOR.abaixo, tile = pedra[k % pedra.length];
+      // esquerda (frente para +x): du para a frente (−z), dv para cima
+      face(tile, [cx - half, -CORREDOR.abaixo, z0], [0, 0, -L], [0, h / n(h), 0], 1, n(h), 0.4);
+      // direita (frente para −x): começa no fim do segmento e vem para trás (+z)
+      face(tile, [cx + half, -CORREDOR.abaixo, z1], [0, 0, L], [0, h / n(h), 0], 1, n(h), 0.36);
+      // piso de laje (frente para cima), um pouco acima do chão plano
+      face(laje, [cx - half, yLaje, z0], [(2 * half) / n(2 * half), 0, 0], [0, 0, -L], n(2 * half), 1, 0.55);
+    }
+    // fachadas (frente para +z, de onde o Crash vem): na emenda e na saída
+    for (const [zz, larg, shade] of [[t.zA, CORREDOR.lado, 0.42], [t.zA - CORREDOR.comp, 3000, 0.38]]) {
+      const cx = cxEm(zz), hTot = CORREDOR.fachAbaixo + CORREDOR.fachAlto, sw = larg - half;
+      face(pedra[0], [cx - larg, -CORREDOR.fachAbaixo, zz], [sw / n(sw), 0, 0], [0, hTot / n(hTot), 0], n(sw), n(hTot), shade);
+      face(pedra[0], [cx + half, -CORREDOR.fachAbaixo, zz], [sw / n(sw), 0, 0], [0, hTot / n(hTot), 0], n(sw), n(hTot), shade);
+      const lh = CORREDOR.fachAlto - CORREDOR.vao; // verga, acima da passagem
+      face(pedra[0], [cx - half, CORREDOR.vao, zz], [(2 * half) / n(2 * half), 0, 0], [0, lh / n(lh), 0], n(2 * half), n(lh), shade * 0.9);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('vcol', new THREE.Float32BufferAttribute(col, 4));
+    g.setAttribute('tuv', new THREE.Float32BufferAttribute(tuv, 2));
+    g.setAttribute('page', new THREE.Float32BufferAttribute(page, 4));
+    g.setAttribute('page2', new THREE.Float32BufferAttribute(page2, 2));
+    return g;
+  }
+  // Fundo (já no espaço plano), com os ladrilhos de terra e pedra do próprio cenário:
+  //  - chão de terra um pouco abaixo da trilha: o que aparecia de céu por frestas do chão (emendas, blocos)
+  //    passa a mostrar terra. Não entra nos buracos (nem logo antes/depois), que continuam fundos;
+  //  - paredão de cada lado, mais longe que o cenário: as frestas entre paredes, árvores e rochas mostram
+  //    pedra e terra em vez de céu.
+  const FUNDO = { chao: -220, margemChao: 900, lado: 6500, baixo: -700, alto: 9000, T: 400 };
+  function fundoGeometry(zA, zB) {
+    const pos = [], col = [], tuv = [], page = [], page2 = [];
+    const ladrilhos = (tile, p0, du, dv, nu, nv, shade) => {
+      const [u0, v0, u1, v1] = [tile.rect[0], tile.rect[1], tile.rect[2] + 0.99, tile.rect[3] + 0.99];
+      const uv = [[u0, v0], [u1, v0], [u0, v1], [u1, v1]];
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        const c = k => [p0[k] + du[k] * i + dv[k] * j, p0[k] + du[k] * (i + 1) + dv[k] * j, p0[k] + du[k] * i + dv[k] * (j + 1), p0[k] + du[k] * (i + 1) + dv[k] * (j + 1)];
+        const X = c(0), Y = c(1), Z = c(2);
+        for (const q of [0, 1, 2, 1, 3, 2]) {
+          pos.push(X[q] * SCALE, Y[q] * SCALE, Z[q] * SCALE);
+          col.push(shade, shade, shade, 1);
+          tuv.push(uv[q][0], uv[q][1]);
+          page.push(tile.page[0], tile.page[1], tile.page[2], tile.page[3]);
+          page2.push(tile.page[4], -1);
+        }
+      }
+    };
+    const T = FUNDO.T, n = len => Math.max(1, Math.round(len / T));
+    const buraco = z => { const q = trailAt(z); return !q || q.w === 0; };
+    let k = 0;
+    for (let z0 = zA; z0 > zB; z0 -= 250, k++) {
+      const z1 = Math.max(zB, z0 - 250), q = trailAt(z0) || trailAt(z1);
+      if (!q) continue;
+      const hw = Math.max(q.w, 1200) / 2;
+      // chão de terra (fora dos buracos e de 500 em volta deles)
+      if (![-500, -250, 0, 250, 500].some(d => buraco(z0 + d))) {
+        const w = 2 * (hw + FUNDO.margemChao);
+        ladrilhos(json.procTiles.ground[k % json.procTiles.ground.length], [q.cx - hw - FUNDO.margemChao, FUNDO.chao, z0], [w / n(w), 0, 0], [0, 0, (z1 - z0) / n(z0 - z1)], n(w), n(z0 - z1), 0.5);
+      }
+      // paredões dos dois lados (pedra das ruínas, variando o ladrilho a cada trecho de 250)
+      const h = FUNDO.alto - FUNDO.baixo, tile = json.procTiles.wall[k % json.procTiles.wall.length];
+      for (const x of [q.cx - hw - FUNDO.lado, q.cx + hw + FUNDO.lado]) {
+        ladrilhos(tile, [x, FUNDO.baixo, z0], [0, 0, (z1 - z0) / n(z0 - z1)], [0, h / n(h), 0], n(z0 - z1), n(h), 0.42);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('vcol', new THREE.Float32BufferAttribute(col, 4));
+    g.setAttribute('tuv', new THREE.Float32BufferAttribute(tuv, 2));
+    g.setAttribute('page', new THREE.Float32BufferAttribute(page, 4));
+    g.setAttribute('page2', new THREE.Float32BufferAttribute(page2, 2));
+    return g;
+  }
+  // Floresta extra: blocos de mata de verdade (palmeiras, folhagem, rochas) recortados da lateral mais cheia da
+  // própria fase (de cada lado, a janela de 2 000 com mais triângulos fora da trilha, entre todos os trechos) e
+  // repetidos atrás das paredes ao longo do caminho. Ficam bem fora da trilha (nada entra no caminho do Crash).
+  const MATA = { bloco: 2000, de: 300, ate: 4500, empurra: 1200 };
+  const meiaTrilha = q => Math.max(q.w, 1200) / 2;
+  const fontesMata = (() => {
+    const passes = ['opaque', 'trans'];
+    const dados = passes.map(pass => {
+      const p = json.passes[pass], n = p.count;
+      return { pass, n, pos: new Float32Array(bin, p.pos, n * 3), col: new Uint8Array(bin, p.col, n * 4), inf: new Int16Array(bin, p.info, n * 8) };
+    });
+    const faixa = (x, z) => { // lado (−1/1) e distância além da beira da trilha, ou null
+      const q = trailAt(z); if (!q || q.w === 0) return null;
+      const lado = x < q.cx ? -1 : 1, rel = (x - q.cx) * lado - meiaTrilha(q);
+      return rel >= MATA.de && rel <= MATA.ate ? { lado, rel } : null;
+    };
+    // conta triângulos por janela de 500 em z, de cada lado (só dentro dos trechos-modelo)
+    const dentro = z => nivel.templates.some(t => z <= t.zA - MATA.bloco / 2 && z >= t.zB + MATA.bloco / 2);
+    const conta = { '-1': new Map(), '1': new Map() };
+    for (const d of dados) for (let i = 0; i < d.n; i += 3) {
+      const xc = (d.pos[i * 3] + d.pos[i * 3 + 3] + d.pos[i * 3 + 6]) / 3, zc = (d.pos[i * 3 + 2] + d.pos[i * 3 + 5] + d.pos[i * 3 + 8]) / 3;
+      const f = faixa(xc, zc); if (!f) continue;
+      const b = Math.round(zc / 500) * 500;
+      conta[f.lado].set(b, (conta[f.lado].get(b) || 0) + 1);
+    }
+    const melhor = lado => {
+      let zMelhor = null, max = -1;
+      for (const b of conta[lado].keys()) {
+        if (!dentro(b)) continue;
+        let s = 0; for (let k = -2; k <= 1; k++) s += conta[lado].get(b + k * 500) || 0;
+        if (s > max) { max = s; zMelhor = b; }
+      }
+      return zMelhor;
+    };
+    const fontes = {};
+    for (const lado of [-1, 1]) {
+      const zM = melhor(lado);
+      fontes[lado] = { z: zM, tris: dados.map(() => []) };
+      if (zM === null) continue;
+      dados.forEach((d, pi) => {
+        for (let i = 0; i < d.n; i += 3) {
+          const zc = (d.pos[i * 3 + 2] + d.pos[i * 3 + 5] + d.pos[i * 3 + 8]) / 3;
+          if (Math.abs(zc - zM) > MATA.bloco / 2) continue;
+          const xc = (d.pos[i * 3] + d.pos[i * 3 + 3] + d.pos[i * 3 + 6]) / 3;
+          const f = faixa(xc, zc); if (!f || f.lado !== lado) continue;
+          const P = new Float32Array(9);
+          for (let c = 0; c < 9; c++) P[c] = d.pos[i * 3 + c] * SCALE;
+          achatar(P); // no espaço plano, como o resto
+          fontes[lado].tris[pi].push({ P, xc: xc * SCALE, zc: zc * SCALE, rel: f.rel, i, d });
+        }
+      });
+    }
+    return fontes;
+  })();
+  // carimba a mata ao longo de [zA, zB] (coordenadas do trecho), um bloco a cada MATA.bloco, dos dois lados
+  function mataGeometry(passIdx, zA, zB) {
+    const P = [], C = [], I = [];
+    for (let z0 = zA; z0 - MATA.bloco / 2 > zB - MATA.bloco / 2; z0 -= MATA.bloco) {
+      const zCentro = z0 - MATA.bloco / 2;
+      for (const lado of [-1, 1]) {
+        const f = fontesMata[lado];
+        if (f.z === null) continue;
+        for (const t of f.tris[passIdx]) {
+          const zDest = zCentro + (t.zc / SCALE - f.z);
+          if (zDest > zA - 150 || zDest < zB + 150) continue; // inteira dentro do trecho (nada atravessa a emenda)
+          const q = trailAt(zDest) || trailAt(Math.min(zA, Math.max(zB, zDest)));
+          if (!q || !q.cx) continue;
+          const base = (q.cx + lado * (meiaTrilha(q) + t.rel + MATA.empurra)) * SCALE;
+          for (let v = 0; v < 3; v++) {
+            P.push(base + (t.P[v * 3] - t.xc), t.P[v * 3 + 1], zDest * SCALE + (t.P[v * 3 + 2] - t.zc));
+            for (let c = 0; c < 4; c++) C.push(t.d.col[(t.i + v) * 4 + c]);
+            for (let c = 0; c < 8; c++) I.push(t.d.inf[(t.i + v) * 8 + c]);
+          }
+        }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    g.setAttribute('vcol', new THREE.BufferAttribute(new Uint8Array(C), 4, true));
+    const ib = new THREE.InterleavedBuffer(new Int16Array(I), 8);
+    g.setAttribute('tuv', new THREE.InterleavedBufferAttribute(ib, 2, 0));
+    g.setAttribute('page', new THREE.InterleavedBufferAttribute(ib, 4, 2));
+    g.setAttribute('page2', new THREE.InterleavedBufferAttribute(ib, 2, 6));
+    if (passIdx === 1) g.userData.transparente = true;
+    return g;
+  }
+  marcar('fontesMata');
+  // geometrias do cenário de cada trecho-modelo (a simulação só conhece a colisão)
+  for (const t of nivel.templates) {
+    const a = trailAt(t.zA), b = trailAt(t.zB);
+    const area = areaCorredor(t);
+    t.geoms = [subsetGeometry('opaque', t.zA, t.zB, a.cx, area), subsetGeometry('trans', t.zA, t.zB, a.cx, area),
+      skirtGeometry(t, a.cx, a.y, b.cx, b.y),
+      corredorGeometry(t),
+      fundoGeometry(t.zA, t.zB), mataGeometry(0, t.zA, t.zB), mataGeometry(1, t.zA, t.zB)];
+  }
+  // o mesmo fundo no começo real da fase (antes do primeiro trecho sorteado)
+  {
+    const zIni = Math.floor(json.entities.find(e => e.gool === 'Will').path[0][2] / 250) * 250 + 1000;
+    const fundoReal = new THREE.Mesh(fundoGeometry(zIni, LOOP_END_Z), makeMaterial(false));
+    fundoReal.frustumCulled = false;
+    scene.add(fundoReal);
+    // e a floresta extra também (o começo é onde mais aparecia o céu)
+    for (const [pi, trans] of [[0, false], [1, true]]) {
+      const m = new THREE.Mesh(mataGeometry(pi, zIni, LOOP_END_Z), makeMaterial(trans));
+      m.frustumCulled = false;
+      if (trans) m.renderOrder = 1;
+      scene.add(m);
+    }
+  }
+  marcar('trechos');
+  window.viewer.templates = nivel.templates;
+  window.viewer.tempos = tempos;
+  window.viewer.guide = player.guide;
+  window.viewer.track = track;
+}
+
+// Placa e HUD (a distância, a trilha e o checkpoint são atualizados pela simulação a cada passo)
+function updateLoop() {
+  if (player.frozen) return;
+  computeScore();
+  const set = (id, v) => { const el = document.getElementById(id); if (el.textContent !== String(v)) el.textContent = v; };
+  set('hud-loop', Math.floor(distanciaAtual() / 100));
+  set('hud-score', score);
+  scoreboard.show(score);
+  set('hud-record', record);
+  set('hud-speed', `${speedMul().toFixed(2)}×`);
+}
+
+function applyLoopUi() {
+  document.querySelector('#hud .loop-only').hidden = !loopMode;
+  document.getElementById('scoreboard').hidden = !loopMode;
+  helpEl.textContent = HELP[mode];
+}
+Object.assign(window.viewer, { updateLoop, updatePickups, mundo, loopInfo: () => ({ distance: distanciaAtual(), score, record, mul: speedMul() }) });
+const loopBox = document.getElementById('loopmode');
+loopBox.checked = loopMode;
+loopBox.disabled = true; // só o modo infinito
+document.getElementById('autorun').disabled = true; // corrida automática sempre (a simulação corre para frente)
+
+function checkFinish() {
+  if (loopMode) return; // no loop não existe fim de fase
+  if (finished || !warp || player.deadTimer > 0) return;
+  const [x, y, z] = warp.path[0];
+  if (Math.hypot(player.pos.x - x, player.pos.z - z) < 450 && Math.abs(player.pos.y - y) < 900) {
+    finished = true;
+    player.frozen = true;
+    showOverlay('Fase concluída!', [
+      `Tempo: ${formatTime(levelTime)}`,
+      `Caixas: ${broken}/${totalBreakable}${broken === totalBreakable ? ' — todas!' : ''}`,
+      `Frutas: ${fruit} · Vidas: ${lives}`,
+      `Inimigos: ${killed}/${enemies.length} · Mortes: ${deaths}`,
+    ]);
+  }
+}
+// Fim de jogo: imagem de partida encerrada na tela inteira (com a placa SCORE por cima) e nenhuma
+// tecla ou clique chega mais ao jogo; só recarregando a página.
+let gameIsOver = false;
+const blockInput = e => { if (gameIsOver && e.key !== 'F5' && !(e.ctrlKey && e.code === 'KeyR')) { e.stopImmediatePropagation(); e.preventDefault(); } };
+for (const t of ['keydown', 'keyup', 'pointerdown', 'pointerup', 'pointermove', 'mousedown', 'wheel', 'contextmenu']) addEventListener(t, blockInput, { capture: true, passive: false });
+// Tela inicial: imagem de START por cima de tudo; o jogo fica parado e só a barra de espaço começa a
+// corrida (ela não vira pulo). Teclas e cliques não passam enquanto a tela está aberta.
+let waitingStart = loopMode;
+const startScreen = document.getElementById('startscreen');
+// A entrada já foi escolhida no lobby (partida do Crash Arena): o saldo começa em zero e cada fruta
+// devolve uma porcentagem dela. Esc na tela de START desiste e devolve a entrada.
+document.getElementById('carregando').hidden = true;
+if (waitingStart) { startScreen.hidden = false; player.frozen = true; }
+computeScore(); scoreboard.show(score);
+// Começa com espaço, ou tocando/clicando na tela; o botão "← Lobby" (ou Esc) desiste.
+const startGate = e => {
+  if (!waitingStart || e.key === 'F5' || (e.ctrlKey && e.code === 'KeyR')) return;
+  e.stopImmediatePropagation(); e.preventDefault();
+  if (e.type === 'pointerdown' && e.pointerType === 'touch') document.body.classList.add('toque');
+  const voltar = (e.type === 'keydown' && e.code === 'Escape') || (e.type === 'pointerdown' && e.target.closest?.('#start-lobby'));
+  if (voltar) {
+    waitingStart = false;
+    arena.cancelarPartida(partida.id).catch(() => {}).finally(() => { location.href = '../lobby/'; });
+    return;
+  }
+  if ((e.type === 'keydown' && e.code === 'Space' && !e.repeat) || (e.type === 'pointerdown' && e.button === 0)) {
+    // o servidor marca o início da corrida; só então o Crash sai correndo
+    waitingStart = false;
+    enableAudio();
+    const dica = startScreen.querySelectorAll('.start-dica');
+    arena.comecarPartida(partida.id).then(() => {
+      startScreen.hidden = true;
+      document.body.classList.add('jogando');
+      player.frozen = false;
+      runStarted = true;
+      runStartTime = performance.now();
+    }).catch(err => {
+      waitingStart = true;
+      dica.forEach(d => { d.textContent = err.message; });
+    });
+  }
+};
+for (const t of ['keydown', 'keyup', 'pointerdown', 'pointerup', 'pointermove', 'mousedown', 'wheel', 'contextmenu']) addEventListener(t, startGate, { capture: true, passive: false });
+function gameOver() {
+  player.frozen = true;
+  gameIsOver = true;
+  document.body.classList.remove('jogando');
+  keys.clear();
+  stopMusic();
+  document.getElementById('gameover').hidden = false;
+  if (loopMode) { computeScore(); updateScore(); }
+  clearInterval(progressoTimer);
+  // Manda a gravação inteira dos comandos: o servidor refaz a corrida, confirma as frutas, credita na
+  // carteira e /resultado/ mostra o resumo. O número de frutas daqui é só informativo.
+  const fim = arena.encerrarPartida(partida.id, {
+    frutas: fruit, distancia: distanciaAtual(), tempoMs: runStartTime ? performance.now() - runStartTime : 0,
+    rle: gravador.rle, passos: gravador.passos, versao: SIM_VERSAO,
+  }).then(() => '../resultado/', () => '../lobby/'); // se falhar (ex.: outra aba já encerrou), o lobby resolve
+  const espera = new Promise(r => setTimeout(r, GAMEOVER_HOLD_MS));
+  Promise.all([fim, espera]).then(([destino]) => location.replace(destino));
+}
+const GAMEOVER_HOLD_MS = 2500; // tempo com a imagem de partida encerrada antes de ir para o resultado
+let runStartTime = 0;
+
+// Gravação dos comandos, passo a passo (o que a simulação aplicou), e envio parcial ao servidor a cada
+// ~2 s e a cada fruta (no máximo 1 por segundo): se a página fechar, o servidor refaz com o que recebeu.
+const gravador = new Gravador();
+let paresConfirmados = 0, enviando = false, ultimoEnvio = 0;
+function enviarProgresso() {
+  if (!runStartTime || gameIsOver || enviando || performance.now() - ultimoEnvio < 1000) return;
+  const desde = Math.max(0, paresConfirmados - 1); // o último par confirmado pode ter crescido
+  const rle = gravador.pedaco(desde);
+  if (!rle.length) return;
+  enviando = true; ultimoEnvio = performance.now();
+  arena.progresso(partida.id, { frutas: fruit, distancia: distanciaAtual(), desde, rle, versao: SIM_VERSAO })
+    .then(r => { if (r && Number.isInteger(r.pares)) paresConfirmados = r.pares; })
+    .catch(() => {})
+    .finally(() => { enviando = false; });
+}
+const progressoTimer = setInterval(enviarProgresso, 2000);
+function formatTime(s) { return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
+function showOverlay(title, lines) {
+  document.getElementById('ov-title').textContent = title;
+  document.getElementById('ov-lines').innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+  document.getElementById('overlay').hidden = false;
+}
+document.getElementById('ov-again').onclick = () => location.reload();
+window.viewer.player = player;
+window.viewer.renderer = renderer;
+window.viewer.enemies = enemies;
+const totalBreakable = boxes.filter(b => b.kind === 'break' || b.kind === 'checkpoint').length;
+function updateScore() {
+  saveSession();
+  // no modo infinito não há total fixo
+  document.getElementById('hud-boxes').textContent = loopMode ? broken : `${broken}/${totalBreakable}`;
+  document.getElementById('hud-enemies').textContent = loopMode ? killed : `${killed}/${enemies.length}`;
+  document.getElementById('hud-deaths').textContent = deaths;
+  document.getElementById('hud-fruit').textContent = fruit;
+  document.getElementById('hud-lives').textContent = Math.max(0, lives);
+  document.getElementById('hud-aku').textContent = ['—', '1 máscara', '2 máscaras', 'invencível'][player.mask || 0];
+  document.getElementById('hud-session').textContent =
+    `Sessão (${session.partidas} partida${session.partidas > 1 ? 's' : ''}): ${session.caixas} caixas · ${session.inimigos} inimigos · ${session.mortes} mortes`;
+  document.getElementById('score').textContent = `Caixas ${broken}/${totalBreakable} · Inimigos ${killed}/${enemies.length} · Mortes ${deaths}`;
+}
+const hudTime = document.getElementById('hud-time');
+let lastMask = 0;
+document.getElementById('hud-reset').onclick = () => {
+  session = { caixas: 0, inimigos: 0, mortes: 0, partidas: 1 };
+  updateScore();
+};
+updateScore();
+
+let mode = 'play';
+const HELP = {
+  get play() {
+    return loopMode && autoRun
+      ? 'correndo sozinho · A/D ou ←/→: desviar · Espaço: pular · F: câmera livre'
+      : 'setas/WASD: andar · Espaço: pular · F: câmera livre';
+  },
+  free: 'arraste: olhar · WASD: andar · Q/E: descer/subir · Shift: rápido · F: voltar a jogar',
+};
+const helpEl = document.getElementById('help');
+helpEl.textContent = HELP[mode];
+applyLoopUi();
+// Trilhos de câmera do jogo (caminhos da ZDAT). Ponto = origem da zona + (x, y, z), mais a rotação da câmera
+// (x, y, z; 4096 = volta inteira). Cada caminho tem uma direção (para onde a fase avança) e um "zoom": a câmera
+// fica no ponto que está zoom unidades atrás do Crash nessa direção.
+const ANG = Math.PI * 2 / 4096;
+const camRails = json.camPaths.map(cp => {
+  const d = new THREE.Vector3(...cp.dir).normalize();
+  return {
+    dir: d, zoom: cp.zoom,
+    pts: cp.pts.map(p => new THREE.Vector3(cp.origin[0] + p[0], cp.origin[1] + p[1], cp.origin[2] + p[2])),
+    rots: cp.pts.map(p => new THREE.Quaternion().setFromEuler(new THREE.Euler(p[3] * ANG, p[4] * ANG, p[5] * ANG, 'YXZ'))),
+  };
+});
+window.viewer.camRails = camRails;
+const camTarget = new THREE.Vector3(), camLook = new THREE.Vector3(), lookSmooth = new THREE.Vector3(), rel = new THREE.Vector3();
+let currentRail = null;
+const localPos = new THREE.Vector3(), railWorld = new THREE.Vector3();
+function railCameraTarget() {
+  let c = player.pos, off = null, allowed = null;
+  if (loopMode && c.z < LOOP_END_Z) {
+    // dentro de uma cópia de trecho: usa os trilhos do trecho original no espaço do modelo
+    const piece = track && track.pieceAt(c.z);
+    if (!piece) return null;
+    off = piece.off;
+    const t = piece.t;
+    allowed = t.railSet || (t.railSet = new Set(camRails.filter(r => r.pts.some(q => q.z <= t.zA + 3000 && q.z > t.zB - 500))));
+    c = localPos.subVectors(player.pos, off);
+  } else c = localPos.copy(c);
+  // mapa plano: os trilhos estão no espaço original; compara com o Crash "desachatado"
+  c.y += alturaChao(c.x, c.z);
+  let best = null, bestScore = Infinity;
+  for (const r of camRails) {
+    if (allowed && !allowed.has(r)) continue;
+    for (let i = 0; i < r.pts.length; i++) {
+      rel.subVectors(c, r.pts[i]);
+      const along = rel.dot(r.dir);                       // quanto o Crash está à frente do ponto
+      const lateral = Math.sqrt(Math.max(0, rel.lengthSq() - along * along));
+      let score = Math.abs(along - r.zoom) + lateral * 0.7;
+      if (r === currentRail) score -= 300;                 // evita trocar de trilho à toa
+      if (score < bestScore) { bestScore = score; best = { r, i }; }
+    }
+  }
+  if (!best || bestScore > 3500) return null;              // longe de qualquer trilho
+  currentRail = best.r;
+  best.pos = railWorld.copy(best.r.pts[best.i]);
+  best.pos.y -= alturaChao(best.pos.x, best.pos.z); // e o ponto do trilho volta para o espaço plano
+  if (off) best.pos.add(off);
+  return best;
+}
+const fallbackQuat = new THREE.Quaternion(), railMix = new THREE.Quaternion();
+function followCamera(dt, snap) {
+  const p = player.group.position;
+  if (player.deadTimer > 0 && player.deathKind === 'fall' && !snap) {
+    // caindo no buraco: a câmera para onde está e só acompanha o Crash com o olhar
+    fallbackQuat.copy(camera.quaternion);
+    camLook.set(p.x, p.y + 250 * SCALE, p.z);
+    camera.lookAt(camLook);
+    camera.quaternion.copy(fallbackQuat.slerp(camera.quaternion, 1 - Math.exp(-dt * 6)));
+    return;
+  }
+  const rail = railCameraTarget();
+  const k = snap ? 1 : 1 - Math.exp(-dt * 4);
+  if (rail) {
+    camTarget.copy(rail.pos).multiplyScalar(SCALE);
+    if (retrato()) { camTarget.sub(p).multiplyScalar(CAM_RETRATO.longe).add(p); camTarget.y += CAM_RETRATO.sobe * SCALE; }
+    camera.position.lerp(camTarget, k);
+    // rotação do trilho, puxada metade do caminho para o Crash (o jogo também gira a câmera um pouco
+    // para acompanhá-lo; o cálculo exato fica em c1c/src/cam.cc e ainda não foi portado)
+    fallbackQuat.copy(camera.quaternion);
+    camLook.set(p.x, p.y + 250 * SCALE, p.z);
+    camera.lookAt(camLook);
+    railMix.copy(rail.r.rots[rail.i]).slerp(camera.quaternion, 0.5);
+    camera.quaternion.copy(fallbackQuat).slerp(railMix, k);
+    return;
+  }
+  // sem trilho por perto: atrás e acima, olhando para o Crash
+  const fator = retrato() ? CAM_RETRATO.longe : 1;
+  camTarget.set(p.x, p.y + (1000 * fator + (retrato() ? CAM_RETRATO.sobe : 0)) * SCALE, p.z + 1700 * fator * SCALE);
+  camera.position.lerp(camTarget, k);
+  camLook.set(p.x, p.y + 250 * SCALE, p.z);
+  if (snap) lookSmooth.copy(camLook); else lookSmooth.lerp(camLook, 1 - Math.exp(-dt * 8));
+  fallbackQuat.copy(camera.quaternion);
+  camera.lookAt(lookSmooth);
+  camera.quaternion.copy(fallbackQuat.slerp(camera.quaternion, k));
+}
+window.viewer.followCamera = followCamera;
+followCamera(0, true);
+
+// Teclado
+const keys = new Set();
+let jumpPressed = false;
+addEventListener('keydown', e => {
+  if (e.code === 'KeyF' && !e.repeat) {
+    mode = mode === 'play' ? 'free' : 'play';
+    helpEl.textContent = HELP[mode];
+    pathLines.visible = mode === 'free';
+  }
+  if (mode === 'play' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Space' && !e.repeat) jumpPressed = true;
+});
+addEventListener('keydown', e => { keys.add(e.code); enableAudio(); if (e.code !== 'KeyF') runStarted = true; });
+addEventListener('keyup', e => keys.delete(e.code));
+
+// Toque (celular/tablet), três comandos em qualquer parte da tela:
+//  - arrastar para a esquerda / direita: desvia (quanto mais longe do ponto onde o dedo encostou, mais forte);
+//  - arrastar para cima: pula (com o dedo ainda na tela, o pulo vai mais alto, como segurar o botão).
+// Só encostar o dedo não faz nada; depois do pulo o mesmo dedo continua desviando, e descer um pouco e arrastar
+// para cima de novo pula outra vez.
+const STEER_DRAG = 60;   // px de arrasto para o lado para virar no máximo
+const PULO_DRAG = 45;    // px de arrasto para cima para pular
+const touch = { id: null, startX: 0, prevX: 0, prevY: 0, subida: 0, x: 0, pulou: false, jumpHeld: false };
+if (matchMedia('(pointer: coarse)').matches) document.body.classList.add('toque');
+addEventListener('pointerdown', e => { if (e.pointerType === 'touch') document.body.classList.add('toque'); }, { capture: true });
+const zona = document.querySelector('.toque-zona');
+zona.addEventListener('pointerdown', e => {
+  if (touch.id !== null) return; // um dedo por vez
+  Object.assign(touch, { id: e.pointerId, startX: e.clientX, prevX: e.clientX, prevY: e.clientY, subida: 0, x: 0, pulou: false, jumpHeld: false });
+  try { zona.setPointerCapture(e.pointerId); } catch {}
+  document.body.classList.add('toque-usado');
+  enableAudio();
+});
+zona.addEventListener('pointermove', e => {
+  if (e.pointerId !== touch.id) return;
+  // "para cima" pelo movimento recente do dedo (vale mesmo no meio de um desvio): soma enquanto sobe mais do
+  // que anda para o lado; descer zera
+  const ddx = e.clientX - touch.prevX, ddy = e.clientY - touch.prevY;
+  touch.prevX = e.clientX; touch.prevY = e.clientY;
+  if (ddy < 0 && -ddy >= Math.abs(ddx)) touch.subida += -ddy;
+  else if (ddy > 3) { touch.subida = 0; touch.pulou = false; touch.jumpHeld = false; } // desceu: pode pular de novo
+  if (!touch.pulou && touch.subida > PULO_DRAG) {
+    jumpPressed = true; touch.pulou = true; touch.jumpHeld = true;
+  }
+  touch.x = Math.max(-1, Math.min(1, (e.clientX - touch.startX) / STEER_DRAG));
+});
+const soltarToque = e => { if (e.pointerId === touch.id) Object.assign(touch, { id: null, x: 0, jumpHeld: false }); };
+zona.addEventListener('pointerup', soltarToque);
+zona.addEventListener('pointercancel', soltarToque);
+// Zoom no celular: o Safari do iPhone ignora user-scalable=no; bloqueia o gesto de pinça e o toque duplo aqui.
+for (const t of ['gesturestart', 'gesturechange', 'gestureend']) addEventListener(t, e => e.preventDefault(), { passive: false });
+addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+let ultimoToque = 0;
+addEventListener('touchend', e => {
+  const t = performance.now();
+  if (t - ultimoToque < 350) e.preventDefault(); // segundo toque rápido = toque duplo: não deixa virar zoom
+  ultimoToque = t;
+}, { passive: false });
+addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false }); // pinça
+// no celular o navegador só libera o som num "pointerup"/"touchend": tenta de novo ao soltar o dedo
+addEventListener('pointerup', () => { if (!gameIsOver) enableAudio(); }, { capture: true });
+// sem menu de contexto nem zoom por toque longo/duplo
+zona.addEventListener('contextmenu', e => e.preventDefault());
+
+let dragging = false;
+renderer.domElement.addEventListener('pointerdown', e => { dragging = true; renderer.domElement.setPointerCapture(e.pointerId); });
+renderer.domElement.addEventListener('pointerup', () => { dragging = false; });
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!dragging || mode !== 'free') return;
+  camera.rotation.y -= e.movementX * 0.004;
+  camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x - e.movementY * 0.004));
+});
+addEventListener('resize', () => {
+  ajustarCamera();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const tmp = new THREE.Vector3();
+function updateAnimated(t) {
+  for (const a of animated) {
+    if (a.frames > 1) {
+      const f = Math.floor(t * ANIM_FPS + a.phase) % a.frames;
+      if (f !== a.lastFrame) {
+        const fr = animFrames(a.key)[f];
+        a.mesh.geometry.setAttribute('position', fr.pos);
+        a.mesh.geometry.setAttribute('vcol', fr.col);
+        a.lastFrame = f;
+      }
+    }
+    if (a.moving) {
+      // vai e volta: distância percorrida dobrada sobre o comprimento do caminho
+      const len = a.dist[a.dist.length - 1];
+      const d0 = (t * a.speed + a.offset) % (2 * len);
+      const forward = d0 < len, d = forward ? d0 : 2 * len - d0;
+      let i = 1;
+      while (i < a.dist.length - 1 && a.dist[i] < d) i++;
+      const seg = a.dist[i] - a.dist[i - 1] || 1;
+      a.mesh.position.lerpVectors(a.pts[i - 1], a.pts[i], (d - a.dist[i - 1]) / seg);
+      if (a.facesPath) {
+        tmp.subVectors(a.pts[i], a.pts[i - 1]);
+        if (!forward) tmp.negate();
+        a.mesh.rotation.y = Math.atan2(tmp.x, tmp.z) + MODEL_YAW;
+      }
+    }
+  }
+}
+// Só desenha o que está antes do fim da neblina: trechos, inimigos e frutas mais longe ficam invisíveis
+// (continuam existindo na simulação; isso só poupa o celular).
+function limitarDesenho() {
+  if (!loopMode || !track) return;
+  const limite = player.pos.z - DESENHO_MAX;
+  for (const pc of track.pieces) {
+    const ver = pc.zStart > limite;
+    for (const m of pc.meshes) m.visible = ver;
+    for (const e of pc.enemies) if (e && e.mesh && e.state !== 'dead') e.mesh.visible = ver;
+  }
+  for (const f of pickups) if (f.alive && f.visual) f.visual.visible = f.z > limite;
+}
+const MODEL_YAW = 0; // frente dos modelos: +z
+const clock = new THREE.Clock();
+let acumulado = 0; // tempo real ainda não simulado (a simulação anda em passos fixos de SIM_DT)
+renderer.setAnimationLoop(() => quadro(clock.getDelta()));
+// Um quadro: simulação em passos fixos + desenho. Fica exposto (viewer.quadro) para testes automáticos.
+window.viewer.quadro = quadro;
+window.viewer.gravador = () => gravador;
+function quadro(dt) {
+  if (mode === 'play') {
+    const has = (...c) => c.some(k => keys.has(k));
+    if (!player.frozen) {
+      // passos fixos de 1/60 s (até 0,25 s por quadro, para não "pular" a corrida se a aba travar)
+      acumulado = Math.min(acumulado + dt, 0.25);
+      const x = quantizarX((has('KeyD', 'ArrowRight') ? 1 : 0) - (has('KeyA', 'ArrowLeft') ? 1 : 0) + touch.x);
+      const held = keys.has('Space') || touch.jumpHeld;
+      while (acumulado >= SIM_DT) {
+        const codigo = codificar({ x, jump: jumpPressed, jumpHeld: held });
+        jumpPressed = false; // "apertou agora" vale só para um passo
+        if (!mundo.estado.fim) gravador.add(codigo); // depois da morte o servidor não precisa
+        mundo.passo(decodificar(codigo));
+        acumulado -= SIM_DT;
+      }
+      levelTime += dt;
+      const tt = formatTime(levelTime);
+      if (tt !== hudTime.textContent) hudTime.textContent = tt;
+    } else {
+      player.update(dt, { x: 0, z: 0 }); // parado (tela de START ou fim): só a animação
+    }
+    updateFruit(dt);
+    updatePickups(dt, clock.elapsedTime);
+    updateAku(clock.elapsedTime);
+    checkFinish();
+    updateLoop();
+    if (player.mask !== lastMask) { lastMask = player.mask; updateScore(); }
+    followCamera(dt);
+    limitarDesenho();
+    if (sky) sky.position.copy(camera.position);
+    updateAnimated(clock.elapsedTime);
+    renderer.render(scene, camera);
+    return;
+  }
+  const speed = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 120 : 30) * dt;
+  const dir = new THREE.Vector3();
+  if (keys.has('KeyW')) dir.z -= 1;
+  if (keys.has('KeyS')) dir.z += 1;
+  if (keys.has('KeyA')) dir.x -= 1;
+  if (keys.has('KeyD')) dir.x += 1;
+  dir.applyEuler(camera.rotation).multiplyScalar(speed);
+  if (keys.has('KeyE')) dir.y += speed;
+  if (keys.has('KeyQ')) dir.y -= speed;
+  camera.position.add(dir);
+  if (sky) sky.position.copy(camera.position);
+  // (na câmera livre a corrida fica parada: inimigos só andam dentro da simulação, em passos fixos)
+  updateAnimated(clock.elapsedTime);
+  renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

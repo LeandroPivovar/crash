@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Lobby</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+</head>
+<body class="pg-lobby">
+<header id="topo"></header>
+<main>
+  <section class="lobby-intro">
+    <h1>Sua próxima corrida começa aqui.</h1>
+    <p>Corra pela praia sem fim, pule os buracos, desvie dos inimigos e pegue todas as frutas que conseguir. Uma vida só.</p>
+  </section>
+
+  <aside class="match-panel" aria-labelledby="modo-titulo">
+    <span class="season">MODO DE JOGO</span>
+    <h3 id="modo-titulo">Desafio solo</h3>
+    <p>Você contra a ilha. Cada fruta coletada devolve moedas para a sua carteira.</p>
+    <div class="match-detail"><span>Mapa</span><strong>N. Sanity Beach</strong></div>
+    <div class="match-detail"><span>Vidas</span><strong>1</strong></div>
+    <div class="match-detail"><span>Seu saldo</span><strong class="num">✦ <span id="saldo">0,00</span></strong></div>
+    <form id="form-entrada" class="stake" novalidate>
+      <label for="entrada">VALOR DE ENTRADA (MOEDAS)</label>
+      <div class="field"><span>✦</span><input id="entrada" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>
+      <div class="amounts" id="rapidos">
+        <button type="button" data-v="5">5</button><button type="button" data-v="10">10</button>
+        <button type="button" data-v="20">20</button><button type="button" data-v="50">50</button>
+      </div>
+      <p class="erro" id="erro" role="alert"></p>
+      <button class="primary" id="jogar">JOGAR <b>➜</b></button>
+      <a class="secondary" id="ir-carteira" href="../carteira/" hidden style="margin-top:10px">Depositar moedas na carteira</a>
+    </form>
+  </aside>
+
+  <section class="lobby-history" aria-labelledby="hist-titulo">
+    <div class="lista">
+      <h3 id="hist-titulo">Últimas partidas</h3>
+      <ol id="historico"></ol>
+    </div>
+  </section>
+</main>
+<script type="module" src="../js/paginas/lobby.js"></script>
+</body>
+</html>

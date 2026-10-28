@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Carteira</title>
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/paginas.css">
+</head>
+<body class="pg-interna pg-carteira">
+<header id="topo"></header>
+<main>
+  <section class="panel" aria-labelledby="titulo">
+    <div class="badge"><span>✦</span> CARTEIRA DO JOGADOR</div>
+    <h2 id="titulo">Suas moedas.</h2>
+    <p class="subtitle">Gerencie seu saldo em um só lugar.</p>
+    <div class="big-balance num">✦ <span id="saldo">0,00</span> <small>moedas</small></div>
+    <div class="tabs" role="tablist">
+      <button type="button" class="selected" data-acao="deposito" role="tab" aria-selected="true">Depositar</button>
+      <button type="button" data-acao="saque" role="tab" aria-selected="false">Sacar</button>
+    </div>
+    <form id="form" novalidate>
+      <div id="metodos">
+        <label>FORMA DE DEPÓSITO</label>
+        <div class="payment-methods">
+          <button type="button" class="selected" data-metodo="pix" aria-pressed="true">
+            <span class="payment-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h2v2H2z"/><path d="M6 0v6H0V0zM5 1H1v4h4zM4 12H2v2h2z"/><path d="M6 10v6H0v-6zm-5 1v4h4v-4zm11-9h2v2h-2z"/><path d="M10 0v6h6V0zm5 1v4h-4V1zM8 1V0h1v2H8v2H7V1zm0 5V4h1v2zM6 8V7h1V6h1v2h1V7h5v1h-4v1H7V8zm0 0v1H2V8H1v1H0V7h3v1zm10 1h-1V7h1zm-1 0h-1v2h2v-1h-1zm-4 0h2v1h-1v1h-1zm2 3v-1h-1v1h-1v1H9v1h3v-2zm0 0h3v1h-2v1h-1zm-4-1v1h1v-2H7v1z"/><path d="M7 12h1v3h4v1H7zm9 2v2h-3v-1h2v-1z"/></svg></span>
+            <strong>Pix</strong><small>Transferência instantânea</small>
+          </button>
+          <button type="button" data-metodo="card" aria-pressed="false">
+            <span class="payment-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1z"/><path d="M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg></span>
+            <strong>Cartão</strong><small>Crédito ou débito</small>
+          </button>
+        </div>
+      </div>
+      <label for="valor">VALOR SIMULADO EM R$</label>
+      <div class="field"><span>R$</span><input id="valor" inputmode="decimal" autocomplete="off" value="20"></div>
+      <div class="amounts" id="rapidos">
+        <button type="button" data-v="20">R$ 20</button><button type="button" data-v="50">R$ 50</button><button type="button" data-v="100">R$ 100</button>
+      </div>
+      <p class="note">✦ &nbsp; R$ 1 = 1 moeda<br>Simulação: nenhum dinheiro será movimentado.</p>
+      <p class="erro" id="erro" role="alert"></p>
+      <button class="primary" id="enviar">CONTINUAR COM PIX ➜</button>
+    </form>
+    <div class="lista">
+      <h3>Histórico</h3>
+      <ol id="movimentos"></ol>
+    </div>
+  </section>
+</main>
+<dialog class="arena" id="confirmar" aria-labelledby="dlg-titulo">
+  <button class="dialog-close" type="button" data-fechar aria-label="Fechar">×</button>
+  <div class="badge" id="dlg-badge">CARTEIRA · PIX</div>
+  <h2 id="dlg-titulo">Depósito via Pix</h2>
+  <div class="payment-summary"><strong id="dlg-valor"></strong><span id="dlg-moedas"></span></div>
+  <p>Esta é uma simulação. Nenhuma cobrança será feita e nenhum dado de pagamento é pedido.</p>
+  <button class="primary" type="button" id="dlg-ok">SIMULAR DEPÓSITO <b>✓</b></button>
+  <button class="secondary" type="button" data-fechar style="margin-top:10px">← Voltar</button>
+</dialog>
+<dialog class="arena" id="dlg-saque" aria-labelledby="saque-titulo">
+  <button class="dialog-close" type="button" data-fechar-saque aria-label="Fechar">×</button>
+  <div class="badge">CARTEIRA · SAQUE</div>
+  <h2 id="saque-titulo">Confirme o saque</h2>
+  <div class="payment-summary"><strong id="saque-valor"></strong><span>saque simulado</span></div>
+  <div id="saque-com-2fa">
+    <label for="saque-codigo">CÓDIGO DO APP AUTENTICADOR</label>
+    <div class="field"><span>#</span><input id="saque-codigo" inputmode="numeric" maxlength="11" autocomplete="one-time-code" placeholder="6 dígitos (ou código de reserva)"></div>
+    <p class="erro" id="saque-erro" role="alert"></p>
+    <button class="primary" type="button" id="saque-ok">CONFIRMAR SAQUE <b>✓</b></button>
+  </div>
+  <div id="saque-sem-2fa" hidden>
+    <p>Para sacar, ative antes a <b>verificação em duas etapas</b> (app autenticador no celular). Assim, quem descobrir sua senha não consegue tirar suas moedas.</p>
+    <a class="primary" href="../conta/" style="display:block;text-align:center;text-decoration:none">ATIVAR EM MINHA CONTA ➜</a>
+  </div>
+  <button class="secondary" type="button" data-fechar-saque style="margin-top:10px">← Voltar</button>
+</dialog>
+<script type="module" src="../js/paginas/carteira.js"></script>
+</body>
+</html>

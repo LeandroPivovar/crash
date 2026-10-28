@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Entrar</title>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/paginas.css">
+</head>
+<body class="pg-entrar">
+<main>
+  <section class="hero">
+    <span class="brand"><img src="img/plataforma/logo-horizontal.svg" alt="Crash Arena"></span>
+    <h1>ENTRE NA ILHA.<br>DOMINE A <em>DISPUTA.</em></h1>
+  </section>
+  <section class="panel" aria-labelledby="titulo">
+    <h2 id="titulo">Entre na arena.</h2>
+    <p class="subtitle" id="subtitulo">Seu lugar na largada está reservado.</p>
+    <div class="tabs" role="tablist" id="abas">
+      <button type="button" class="selected" data-modo="entrar" role="tab" aria-selected="true">Entrar</button>
+      <button type="button" data-modo="criar" role="tab" aria-selected="false">Criar conta</button>
+    </div>
+    <form id="auth" novalidate>
+      <div data-so="criar" hidden>
+        <label for="nome">NOME DO JOGADOR</label>
+        <div class="field"><span>♙</span><input id="nome" maxlength="30" placeholder="Como quer ser chamado?" autocomplete="nickname"></div>
+      </div>
+      <div data-so="entrar criar recuperar">
+        <label for="email">SEU E-MAIL</label>
+        <div class="field"><span>✉</span><input id="email" type="email" placeholder="player@email.com" autocomplete="email" required></div>
+      </div>
+      <div data-so="codigo" hidden>
+        <label for="codigo">CÓDIGO DO APP AUTENTICADOR</label>
+        <div class="field"><span>⚿</span><input id="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="6 dígitos (ou um código de reserva)"></div>
+      </div>
+      <div data-so="entrar criar">
+        <label for="senha">SUA SENHA</label>
+        <div class="field"><span>◇</span><input id="senha" type="password" minlength="8" placeholder="Pelo menos 8 caracteres" autocomplete="current-password"><button type="button" class="eye" aria-label="Mostrar senha">◉</button></div>
+      </div>
+      <div data-so="criar" hidden>
+        <label for="confirmar">CONFIRMAR SENHA</label>
+        <div class="field"><span>◇</span><input id="confirmar" type="password" minlength="8" placeholder="Repita sua senha" autocomplete="new-password"></div>
+        <label for="nascimento">DATA DE NASCIMENTO</label>
+        <div class="field"><span>◷</span><input id="nascimento" type="date" autocomplete="bday"></div>
+        <p class="note" style="margin:12px 0 0">O Crash Arena é só para maiores de 18 anos.</p>
+      </div>
+      <div class="options" data-so="entrar"><button type="button" class="text-btn" id="esqueci">Esqueci minha senha</button></div>
+      <p class="erro" id="erro" role="alert"></p>
+      <p class="note" id="aviso" hidden></p>
+      <button type="button" class="secondary" id="reenviar" hidden style="margin-bottom:12px">Reenviar link de confirmação</button>
+      <button class="primary" id="enviar">ENTRAR NO LOBBY <b>➜</b></button>
+      <button type="button" class="text-btn" id="voltar-login" data-so="recuperar" hidden style="margin-top:14px">← Voltar para o login</button>
+    </form>
+    <div data-so="entrar criar">
+      <div class="divider">OU EXPLORE PRIMEIRO</div>
+      <label class="check"><input type="checkbox" id="maior18"> Tenho 18 anos ou mais</label>
+      <button class="secondary" id="visitante" type="button">♧ &nbsp; Entrar como visitante</button>
+    </div>
+    <p class="note">Protótipo: as moedas são simuladas, nenhum dinheiro é movimentado.</p>
+  </section>
+</main>
+<script type="module" src="js/paginas/entrar.js"></script>
+</body>
+</html>

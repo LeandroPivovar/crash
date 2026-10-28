@@ -1,0 +1,75 @@
+/* Crash Arena — estilos de cada tela */
+
+/* ---------- Entrar ---------- */
+body.pg-entrar main { min-height: 100vh; display: grid; grid-template-columns: 1.3fr 1fr; gap: 6%; align-items: center; padding: 58px 6% 56px;
+  background: linear-gradient(90deg, #130d2220 0%, #140d2210 40%, #130c23e8 66%, #130c23 100%), url(../img/plataforma/hero-competition.png) left center / cover no-repeat; }
+.hero h1 { font: 900 italic clamp(45px, 5.1vw, 76px)/.96 var(--display); letter-spacing: -1px; margin: 0; text-shadow: 0 3px 20px #130c23a0; }
+.hero h1 em { color: #ffb03d; font-style: inherit; }
+.hero .brand img { width: 220px; height: 46px; margin-bottom: 26px; }
+body.pg-entrar .panel { justify-self: end; }
+
+/* ---------- páginas internas (carteira, conta, resultado) ---------- */
+body.pg-interna main { display: grid; place-items: start center;
+  background: linear-gradient(#170b28b0, #170b28dc), url(../img/plataforma/hero-competition.png) center / cover no-repeat; }
+body.pg-carteira main { background: linear-gradient(90deg, #150b27dd, #150b2766), url(../img/plataforma/wallet-bg.png) center / cover no-repeat; }
+body.pg-carteira .panel { max-width: 520px; background: #211332dd; }
+.big-balance { font: 800 55px var(--display); color: #ffc34f; padding: 10px 0 20px; }
+.big-balance small { font: 500 12px Inter, sans-serif; color: #b6a7c5; }
+.payment-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 18px; }
+.payment-methods button { position: relative; text-align: left; padding: 14px; border-radius: 12px; border: 1px solid #ffffff20; background: #170e26; color: #b8a8c9; }
+.payment-methods button.selected { border-color: #ffb84e; color: #ffd088; background: #ffb0390d; }
+.payment-methods button.selected::after { content: '✓'; position: absolute; right: 12px; top: 14px; font-size: 11px; }
+.payment-methods strong { display: block; font-size: 12px; margin-top: 7px; }
+.payment-methods small { display: block; font-size: 9px; margin-top: 5px; color: #a796b9; }
+.payment-icon svg { display: block; width: 24px; height: 24px; fill: currentColor; }
+.payment-summary { display: flex; justify-content: space-between; align-items: center; margin: 24px 0; gap: 12px; }
+.payment-summary strong { font: 800 35px var(--display); }
+.payment-summary span { font-size: 12px; color: #ffc063; }
+
+/* lista de movimentos / partidas */
+.lista { margin: 26px 0 0; }
+.lista h3 { font: 800 22px var(--display); margin: 0 0 10px; }
+.lista ol { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+.lista li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.lista li small { display: block; color: #8e809e; font-size: 10px; margin-top: 3px; }
+.lista li b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lista .vazio { color: #8e809e; font-size: 12px; padding: 10px 2px; }
+
+/* ---------- Lobby (modo Solo) ---------- */
+body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: clamp(24px, 4vw, 70px); align-items: start; padding: 32px 4.8%;
+  background: linear-gradient(180deg, rgba(12,7,25,.7), transparent 25%, transparent 70%, #120d22), url(../img/plataforma/lobby-bg.png) center top / cover no-repeat, var(--bg-2); }
+.lobby-intro h1 { font: 800 clamp(34px, 3vw, 56px)/1.05 var(--display); margin: 0 0 10px; text-shadow: 0 2px 16px #10091d; }
+.lobby-intro p { color: #e4dcef; font-size: 14px; line-height: 1.7; max-width: 520px; text-shadow: 0 2px 10px #000; margin: 0; }
+.match-panel { background: rgba(24,14,39,.94); border: 1px solid #ffffff20; border-radius: 20px; padding: 24px; box-shadow: 0 16px 48px #10081938; animation: entrar .35s ease-out; }
+.season { font-size: 10px; letter-spacing: 2px; color: #aa91c0; }
+.match-panel h3 { font: 800 34px/1.1 var(--display); margin: 10px 0; }
+.match-panel > p { color: #ac9cbd; font-size: 13px; line-height: 1.6; margin: 0 0 12px; }
+.match-detail { display: flex; justify-content: space-between; gap: 12px; margin: 10px 0; font-size: 13px; }
+.match-detail > span { font-size: 10px; letter-spacing: .7px; color: #92829f; text-transform: uppercase; }
+.match-detail strong { font-weight: 600; color: #d5c8e1; text-align: right; }
+.stake { margin-top: 16px; padding-top: 6px; border-top: 1px solid var(--line); }
+.stake .field > span { top: 13px; color: #ffc34f; }
+.stake-info { display: flex; justify-content: space-between; font-size: 11px; color: #a699b6; margin-top: 8px; }
+.match-panel .primary { margin-top: 16px; }
+.lobby-history { grid-column: 1; align-self: end; background: rgba(24,14,39,.88); border: 1px solid #ffffff16; border-radius: 18px; padding: 20px 22px; max-width: 620px; }
+.lobby-history .lista { margin: 0; }
+.lobby-history .lista ol { max-height: 230px; }
+
+/* ---------- Resultado ---------- */
+.resultado-linhas { margin: 6px 0 14px; }
+.resultado-linhas div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.resultado-linhas dt { color: #c9bcd8; }
+.resultado-linhas dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+.saldo-final { display: flex; justify-content: space-between; align-items: baseline; border-radius: 12px; padding: 12px 16px; font: 900 26px var(--display); letter-spacing: .02em; margin: 14px 0; }
+.saldo-final.gain { background: rgba(60,180,90,.2); border: 2px solid #4fbf6f; }
+.saldo-final.loss { background: rgba(220,60,50,.18); border: 2px solid #d9534a; }
+.saldo-final.even { background: rgba(255,255,255,.06); border: 2px solid #c99a4a; color: #fff4dc; }
+.acoes { display: grid; gap: 10px; margin-top: 18px; }
+
+@media (max-width: 900px) {
+  body.pg-entrar main { grid-template-columns: 1fr; gap: 25px; padding: 35px 6%; background-position: 30% center; }
+  body.pg-entrar .panel { justify-self: center; max-width: 470px; background: #21152eee; }
+  .hero h1 { font-size: 52px; }
+  body.pg-lobby main { grid-template-columns: 1fr; background-size: auto 100%; }
+  .lobby-history { grid-column: 1; }
+}

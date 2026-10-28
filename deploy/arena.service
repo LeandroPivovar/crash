@@ -1,0 +1,21 @@
+# Serviço do Crash Arena (systemd). Instalado por deploy/instalar.sh em /etc/systemd/system/arena.service.
+[Unit]
+Description=Crash Arena
+After=network.target
+
+[Service]
+User=arena
+WorkingDirectory=/opt/arena/app
+EnvironmentFile=/opt/arena/arena.env
+ExecStart=/opt/arena/node/bin/node servidor/serve.js
+Restart=always
+RestartSec=3
+# isolamento: só escreve na pasta de dados
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/arena/dados
+
+[Install]
+WantedBy=multi-user.target

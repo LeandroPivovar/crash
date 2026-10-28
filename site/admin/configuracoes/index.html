@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Regras do jogo</title>
+<style>
+  :root { --bg: #0b1020; --panel: #151b30; --line: rgba(255,255,255,0.1); --text: #e8ecf5; --muted: #9aa4bb; --accent: #ff9a3c; --ok: #6fdc8c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0 0 4px; font-size: 24px; color: var(--accent); }
+  .sub { margin: 0 0 20px; color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  section h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+  .field + .field { border-top: 1px solid var(--line); }
+  .field label { font-weight: 600; }
+  .field small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; }
+  .ctrl { display: flex; align-items: center; gap: 8px; flex: none; }
+  input[type=number], select { width: 76px; background: #0d1224; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; text-align: center; }
+  select { width: auto; text-align: left; }
+  input:disabled { opacity: .4; }
+  .auto { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; font-weight: 400; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  button, a.btn { background: none; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 16px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; }
+  button:hover, a.btn:hover { border-color: var(--accent); }
+  .unit { color: var(--muted); font-weight: 600; }
+  .hint { margin: 2px 0 6px; padding: 8px 10px; background: rgba(255,154,60,0.1); border-radius: 6px; color: var(--text); font-size: 14px; }
+  .hint b { color: var(--accent); }
+  input.txt { width: 170px; background: #0d1224; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit; }
+  .chave { font: 600 18px ui-monospace, Consolas, monospace; letter-spacing: .08em; background: #0d1224; border: 1px solid var(--line); border-radius: 8px; padding: 12px; word-break: break-all; }
+  #ativar-2fa p { color: var(--text); font-size: 14px; }
+  #ativar-2fa a { color: var(--accent); }
+  .status-2fa { min-height: 20px; color: #ff7a7a; margin-top: 8px; }
+  .analise { border-top: 1px solid var(--line); padding: 10px 0; display: grid; gap: 6px; }
+  .analise:first-child { border-top: 0; }
+  .analise b { color: var(--accent); }
+  .analise small { color: var(--muted); }
+  .analise .botoes { display: flex; gap: 8px; }
+  .vazio { color: var(--muted); font-size: 14px; margin: 0; }
+  .eventos { max-height: 320px; overflow: auto; font-size: 13px; }
+  .eventos div { display: flex; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
+  .eventos time { color: var(--muted); white-space: nowrap; }
+  .eventos code { color: #ffd088; }
+  #status { min-height: 20px; margin-top: 12px; color: var(--ok); }
+  #status.err { color: #ff7a7a; }
+  @media (max-width: 420px) { .field { flex-direction: column; align-items: flex-start; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Configurações</h1>
+  <p class="sub">Regras do Desafio solo (operador). Ficam salvas no servidor e valem para todas as partidas criadas depois de salvar.</p>
+  <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador pode mudar as regras.</p><a class="btn" href="/">Entrar com a conta de operador</a></section>
+
+  <section id="ativar-2fa" hidden>
+    <h2>Verificação em duas etapas (obrigatória)</h2>
+    <p>Para mudar regras e aprovar pagamentos, a conta de operador precisa de um segundo fator: um código de 6 dígitos que muda a cada 30 segundos num app do celular (Google Authenticator, Microsoft Authenticator, Authy…).</p>
+    <div id="passo-1">
+      <div class="field">
+        <label for="senha-2fa">Confirme sua senha<small>Para gerar a chave do app.</small></label>
+        <div class="ctrl"><input type="password" id="senha-2fa" autocomplete="current-password" class="txt"></div>
+      </div>
+      <div class="actions"><button type="button" class="primary" id="gerar-2fa">Gerar chave</button></div>
+    </div>
+    <div id="passo-2" hidden>
+      <p>1. No app, escolha <b>adicionar conta</b> → <b>inserir chave de configuração</b> e digite a chave abaixo (tipo: baseada em tempo). No celular, você também pode tocar em <a id="link-otp" href="#">abrir no app autenticador</a>.</p>
+      <p class="chave" id="chave-2fa"></p>
+      <div class="field">
+        <label for="codigo-2fa">2. Digite o código que o app mostra</label>
+        <div class="ctrl"><input id="codigo-2fa" inputmode="numeric" maxlength="6" autocomplete="one-time-code" class="txt"></div>
+      </div>
+      <div class="actions"><button type="button" class="primary" id="confirmar-2fa">Ativar</button></div>
+    </div>
+    <div id="passo-3" hidden>
+      <p><b>Ativado.</b> Guarde estes códigos de reserva num lugar seguro (fora do celular). Cada um entra uma vez, se você perder o celular. Eles não aparecem de novo.</p>
+      <p class="chave" id="reserva-2fa"></p>
+      <div class="actions"><button type="button" class="primary" id="guardei-2fa">Já guardei os códigos</button></div>
+    </div>
+    <div id="status-2fa" class="status-2fa" role="status"></div>
+  </section>
+  <section id="entrar-2fa" hidden>
+    <h2>Entre com o código do app</h2>
+    <p>Esta sessão foi aberta sem o código do app autenticador. Saia e entre de novo: depois da senha, o site vai pedir o código.</p>
+    <div class="actions"><button type="button" class="primary" id="sair-2fa">Sair e entrar de novo</button></div>
+  </section>
+
+  <form id="form" hidden>
+    <section>
+      <h2>Inimigos</h2>
+      <div class="field">
+        <label for="enemiesPerChunk">Inimigos por chunk<small>Em cada trecho sorteado. Automático: aumenta com a distância.</small></label>
+        <div class="ctrl">
+          <span class="auto"><input type="checkbox" id="enemiesAuto"> automático</span>
+          <input type="number" id="enemiesPerChunk" min="0" max="8" step="1">
+        </div>
+      </div>
+      <div class="field">
+        <label for="enemiesStart">Inimigos no bloco inicial<small>No começo da fase, antes do primeiro chunk.</small></label>
+        <div class="ctrl"><input type="number" id="enemiesStart" min="0" max="8" step="1"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Frutas</h2>
+      <div class="field">
+        <label for="fruitMin">Tamanho mínimo do grupo<small>Um grupo por chunk; o tamanho é sorteado entre o mínimo e o máximo.</small></label>
+        <div class="ctrl"><input type="number" id="fruitMin" min="1" max="10" step="1"></div>
+      </div>
+      <div class="field">
+        <label for="fruitMax">Tamanho máximo do grupo</label>
+        <div class="ctrl"><input type="number" id="fruitMax" min="1" max="10" step="1"></div>
+      </div>
+      <div class="field">
+        <label for="fruitPercent">Valor de cada fruta (%)<small>Porcentagem do valor depositado que cada fruta coletada devolve ao saldo.</small></label>
+        <div class="ctrl"><input type="text" inputmode="decimal" id="fruitPercent" style="width:76px;background:#0d1224;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;text-align:center"><span class="unit">%</span></div>
+      </div>
+      <p class="hint" id="breakEven"></p>
+    </section>
+
+    <section>
+      <h2>Buracos</h2>
+      <div class="field">
+        <label for="pitsMin">Mínimo de buracos por chunk<small>O número de buracos de cada chunk é sorteado entre o mínimo e o máximo (até 99). Chunks com muitos buracos ficam mais longos: juntam vários trechos da fase.</small></label>
+        <div class="ctrl"><input type="number" id="pitsMin" min="0" max="99" step="1"></div>
+      </div>
+      <div class="field">
+        <label for="pitsMax">Máximo de buracos por chunk</label>
+        <div class="ctrl"><input type="number" id="pitsMax" min="0" max="99" step="1"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Velocidade</h2>
+      <div class="field">
+        <label for="speedStart">Velocidade inicial<small>1 = velocidade original do jogo. Abaixo de 0,9 os buracos maiores podem ficar impossíveis de pular.</small></label>
+        <div class="ctrl"><input type="number" id="speedStart" min="0.1" max="10" step="0.05"></div>
+      </div>
+      <div class="field">
+        <label for="speedGain">Acréscimo a cada 100 m<small>Quanto a velocidade sobe a cada 100 m percorridos. 0 = velocidade fixa.</small></label>
+        <div class="ctrl"><input type="number" id="speedGain" min="0" max="10" step="0.001"></div>
+      </div>
+      <div class="field">
+        <label for="speedMax">Velocidade máxima<small>A velocidade para de subir aqui.</small></label>
+        <div class="ctrl"><input type="number" id="speedMax" min="0.1" max="10" step="0.05"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Proteção</h2>
+      <div class="field">
+        <label for="analiseAcimaDe">Analisar pagamentos acima de (× a entrada)<small>Pagamento maior que isso não é creditado na hora: fica em análise até você aprovar. Pagamentos com sinais de robô também vão para análise.</small></label>
+        <div class="ctrl"><input type="number" id="analiseAcimaDe" min="1" max="1000" step="0.5"><span class="unit">×</span></div>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button type="submit" class="primary">Salvar</button>
+      <button type="button" id="reset">Restaurar padrão</button>
+      <a class="btn" href="/lobby/">Lobby</a>
+    </div>
+    <div id="status" role="status"></div>
+  </form>
+
+  <section id="analises" hidden>
+    <h2>Pagamentos em análise</h2>
+    <div id="lista-analises"></div>
+  </section>
+  <section id="auditoria" hidden>
+    <h2>Eventos de segurança recentes</h2>
+    <div id="lista-auditoria" class="eventos"></div>
+  </section>
+</main>
+<script type="module">
+import { DEFAULTS, breakEvenFruits, normalize } from '../../js/jogo/config.js';
+import * as arena from '../../js/arena.js';
+
+const $ = id => document.getElementById(id);
+const status = $('status');
+
+// abaixo do campo: quantas frutas empatam com o valor depositado (atualiza enquanto digita)
+function showBreakEven() {
+  const pct = Number(String($('fruitPercent').value).replace(',', '.'));
+  const el = $('breakEven');
+  if (!(pct > 0)) { el.textContent = 'Informe uma porcentagem maior que 0.'; return; }
+  const n = breakEvenFruits(pct);
+  el.innerHTML = `Para igualar o investimento: <b>${n} ${n === 1 ? 'fruta' : 'frutas'}</b>` +
+    ` (exemplo: depositando R$ 10, cada fruta vale R$ ${(10 * pct / 100).toFixed(2).replace('.', ',')}).`;
+}
+$('fruitPercent').addEventListener('input', showBreakEven);
+
+function fill(c) {
+  const auto = c.enemiesPerChunk === 'auto';
+  $('enemiesAuto').checked = auto;
+  $('enemiesPerChunk').disabled = auto;
+  $('enemiesPerChunk').value = auto ? 2 : c.enemiesPerChunk;
+  $('enemiesStart').value = c.enemiesStart;
+  $('fruitMin').value = c.fruitMin;
+  $('fruitMax').value = c.fruitMax;
+  $('fruitPercent').value = String(c.fruitPercent).replace('.', ',');
+  showBreakEven();
+  $('speedStart').value = c.speedStart;
+  $('speedGain').value = c.speedGain;
+  $('speedMax').value = c.speedMax;
+  $('pitsMin').value = c.pitsMin;
+  $('pitsMax').value = c.pitsMax;
+  $('analiseAcimaDe').value = c.analiseAcimaDe;
+}
+function read() {
+  return {
+    enemiesPerChunk: $('enemiesAuto').checked ? 'auto' : $('enemiesPerChunk').value,
+    enemiesStart: $('enemiesStart').value,
+    fruitMin: $('fruitMin').value,
+    fruitMax: $('fruitMax').value,
+    fruitPercent: $('fruitPercent').value,
+    speedStart: $('speedStart').value,
+    speedGain: $('speedGain').value,
+    speedMax: $('speedMax').value,
+    pitsMin: $('pitsMin').value,
+    pitsMax: $('pitsMax').value,
+    analiseAcimaDe: $('analiseAcimaDe').value,
+  };
+}
+function say(msg, err = false) { status.textContent = msg; status.classList.toggle('err', err); }
+
+$('enemiesAuto').addEventListener('change', e => { $('enemiesPerChunk').disabled = e.target.checked; });
+$('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const raw = read();
+  if (+raw.fruitMax < +raw.fruitMin) { say('O tamanho máximo precisa ser maior ou igual ao mínimo.', true); return; }
+  if (+raw.speedMax < +raw.speedStart) { say('A velocidade máxima precisa ser maior ou igual à inicial.', true); return; }
+  if (+raw.pitsMax < +raw.pitsMin) { say('O máximo de buracos precisa ser maior ou igual ao mínimo.', true); return; }
+  salvar(raw, 'Salvo. Vale para as próximas partidas.');
+});
+$('reset').addEventListener('click', () => salvar(DEFAULTS, 'Valores padrão restaurados.'));
+async function salvar(regras, msg) {
+  try { fill(await arena.salvarRegras(regras)); say(msg); }
+  catch (err) { say(err.message, true); }
+}
+
+// só o operador vê e salva as regras
+const { usuario } = await arena.sessao().catch(() => ({}));
+if (!usuario?.operador) {
+  $('sem-acesso').hidden = false;
+  if (usuario) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador. Saia e entre com a conta de operador.`;
+} else if (!usuario.doisFatoresAtivo) {
+  $('ativar-2fa').hidden = false; // primeiro, o app autenticador
+} else if (!usuario.sessaoComDoisFatores) {
+  $('entrar-2fa').hidden = false;
+} else {
+  $('form').hidden = false;
+  fill(await arena.regras());
+}
+
+// ---- ativação do app autenticador ----
+const msg2fa = t => { $('status-2fa').textContent = t || ''; };
+$('gerar-2fa').addEventListener('click', async () => {
+  msg2fa();
+  try {
+    const r = await arena.iniciar2fa($('senha-2fa').value);
+    $('senha-2fa').value = '';
+    $('chave-2fa').textContent = r.segredo.match(/.{1,4}/g).join(' ');
+    $('link-otp').href = r.uri;
+    $('passo-1').hidden = true; $('passo-2').hidden = false;
+    $('codigo-2fa').focus();
+  } catch (err) { msg2fa(err.message); }
+});
+$('confirmar-2fa').addEventListener('click', async () => {
+  msg2fa();
+  try {
+    const r = await arena.confirmar2fa($('codigo-2fa').value);
+    $('reserva-2fa').textContent = r.codigosReserva.map(c => c.slice(0, 5) + '-' + c.slice(5)).join('   ');
+    $('passo-2').hidden = true; $('passo-3').hidden = false;
+  } catch (err) { msg2fa(err.message); }
+});
+$('guardei-2fa').addEventListener('click', () => location.reload());
+$('sair-2fa').addEventListener('click', async () => { await arena.sair().catch(() => {}); location.href = '/'; });
+
+// ---- pagamentos em análise: aprovar credita na carteira do jogador; recusar não paga ----
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const data = t => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(t));
+async function mostrarAnalises() {
+  const el = $('lista-analises');
+  try {
+    const { partidas } = await arena.analisesPendentes();
+    if (!partidas.length) { el.innerHTML = '<p class="vazio">Nenhum pagamento esperando análise.</p>'; return; }
+    el.innerHTML = partidas.map(p => `<div class="analise" data-id="${esc(p.id)}">
+      <div><b>✦ ${arena.moedas(p.aPagar)}</b> para ${esc(p.jogador)} ${p.email ? `(${esc(p.email)})` : '(visitante)'}</div>
+      <small>${data(p.encerrada)} · entrada ✦ ${arena.moedas(p.entrada)} · ${p.frutas} frutas confirmadas pelo replay${p.frutasInformadas != null ? ` (o jogo disse ${p.frutasInformadas})` : ''}</small>
+      <small>Motivo: ${esc(p.motivo)}${p.sinais ? ` · até ${p.sinais.viradasPorSegundoMax ?? p.sinais.trocasPorSegundoMax} viradas de comando e ${p.sinais.pulosPorSegundoMax} pulos por segundo` : ''}</small>
+      <div class="botoes"><button type="button" class="primary" data-decisao="aprovar">Aprovar e pagar</button><button type="button" data-decisao="recusar">Recusar</button></div>
+    </div>`).join('');
+  } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
+}
+$('lista-analises').addEventListener('click', async e => {
+  const b = e.target.closest('[data-decisao]');
+  if (!b) return;
+  const id = b.closest('[data-id]').dataset.id;
+  if (b.dataset.decisao === 'aprovar' && !confirm('Aprovar e creditar este pagamento?')) return;
+  b.disabled = true;
+  try { await arena.decidirAnalise(id, b.dataset.decisao); say(b.dataset.decisao === 'aprovar' ? 'Pagamento aprovado e creditado.' : 'Pagamento recusado.'); }
+  catch (err) { say(err.message, true); }
+  await mostrarAnalises();
+  await mostrarAuditoria();
+});
+const EVENTOS = {
+  login: 'entrou', login_operador: 'operador entrou', login_falhou: 'login errado', cadastro: 'conta criada', visitante: 'visitante entrou',
+  cadastro_menor: 'cadastro recusado (menor de 18)', limite_excedido: 'excesso de pedidos bloqueado', regras_alteradas: 'regras alteradas',
+  partida_em_analise: 'pagamento foi para análise', partida_divergente: 'jogo e servidor divergiram', partida_refeita: 'partida refeita (página fechada)',
+  partida_erro: 'replay falhou', analise_aprovada: 'análise aprovada', analise_recusada: 'análise recusada', gravacao_adiantada: 'gravação adiantada recusada',
+  gravacao_reescrita: 'tentou reescrever a gravação', acesso_negado_operador: 'tentou rota de operador', saque: 'saque', senha_redefinida: 'senha redefinida',
+  recuperacao_pedida: 'pediu nova senha', perfil_alterado: 'e-mail ou senha alterados', perfil_senha_errada: 'senha atual errada no perfil',
+  trava_saldo_negativo: 'trava de saldo negativo acionada',
+  login_senha_ok_esperando_codigo: 'operador: senha certa, esperando código', codigo_2fa_errado: 'código do app errado',
+  login_operador_codigo_reserva: 'operador entrou com código de reserva', '2fa_ativado': 'app autenticador ativado',
+  '2fa_senha_errada': 'senha errada ao ativar o app', '2fa_desativado': 'jogador desligou o app autenticador', saque_codigo_errado: 'código errado ao sacar', login_codigo_reserva: 'jogador entrou com código de reserva', recuperacao_email_falhou: 'e-mail de recuperação não foi enviado', '2fa_resetado_pelo_servidor': 'app autenticador desligado no servidor',
+};
+async function mostrarAuditoria() {
+  const el = $('lista-auditoria');
+  try {
+    const { eventos } = await arena.auditoria();
+    el.innerHTML = eventos.length ? eventos.map(ev => `<div><time>${data(ev.quando)}</time><span>${esc(EVENTOS[ev.evento] || ev.evento)}${ev.nome ? ` · ${esc(ev.nome)}` : ''}${ev.ip ? ` · <code>${esc(ev.ip)}</code>` : ''}</span></div>`).join('')
+      : '<p class="vazio">Nada registrado ainda.</p>';
+  } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
+}
+if (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores) {
+  $('analises').hidden = false;
+  $('auditoria').hidden = false;
+  await mostrarAnalises();
+  await mostrarAuditoria();
+}
+</script>
+</body>
+</html>

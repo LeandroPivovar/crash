@@ -1,0 +1,5 @@
+node_modules/
+servidor/dados/
+site/data/*.gz
+_origem/
+*.log
