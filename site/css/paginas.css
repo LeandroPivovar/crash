@@ -2,16 +2,49 @@
 
 /* ---------- Entrar ---------- */
 body.pg-entrar main { min-height: 100vh; display: grid; grid-template-columns: 1.3fr 1fr; gap: 6%; align-items: center; padding: 58px 6% 56px;
-  background: linear-gradient(90deg, #130d2220 0%, #140d2210 40%, #130c23e8 66%, #130c23 100%), url(../img/plataforma/hero-competition.png) left center / cover no-repeat; }
-.hero h1 { font: 900 italic clamp(45px, 5.1vw, 76px)/.96 var(--display); letter-spacing: -1px; margin: 0; text-shadow: 0 3px 20px #130c23a0; }
-.hero h1 em { color: #ffb03d; font-style: inherit; }
-.hero .brand img { width: 220px; height: 46px; margin-bottom: 26px; }
+  background: linear-gradient(90deg, #130d2240 0%, #140d2200 40%, #130c2300 70%, #130c2340 100%), url(../img/plataforma/fundo-entrar.jpg) center / cover no-repeat, #130c23; }
+.hero h1 { font: 800 clamp(48px, 5.6vw, 92px)/1 var(--display); letter-spacing: .5px; margin: 0; color: #fff;
+  text-shadow: 0 3px 0 #1a0f0a, 0 4px 18px #000c; }
+.hero h1 em { font-style: normal; text-shadow: none; /* a sombra cobriria o degradê; quem faz a sombra é o filter */ background: linear-gradient(#ffb43c, #ff7a12); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 #1a0f0a) drop-shadow(0 4px 12px #0009); }
+/* logo no canto superior esquerdo; o "Entre na ilha" fica no meio da coluna da esquerda */
+.logo-hero { position: absolute; top: 20px; left: 3%; display: block; width: clamp(200px, 17vw, 300px); height: auto; filter: drop-shadow(0 6px 14px #0008); }
 body.pg-entrar .panel { justify-self: end; }
+/* login inteiro numa tela, sem rolagem: painel mais compacto */
+body.pg-entrar main { height: 100vh; height: 100dvh; min-height: 0; padding-top: 24px; padding-bottom: 24px; }
+body.pg-entrar .panel { padding: 22px 30px; max-height: 100%; overflow-y: auto; scrollbar-width: none; } /* em tela muito baixa ainda rola dentro do painel, mas sem barra */
+body.pg-entrar .panel::-webkit-scrollbar { display: none; }
+body.pg-entrar .panel h2 { margin-top: 0; }
+body.pg-entrar .subtitle { margin-bottom: 12px; }
+body.pg-entrar .tabs { margin-bottom: 8px; }
+body.pg-entrar label { margin: 12px 0 6px; }
+body.pg-entrar input { height: 44px; }
+body.pg-entrar .field > span { top: 13px; }
+body.pg-entrar .eye { top: 10px; }
+body.pg-entrar .options { margin: 8px 0 14px; }
+body.pg-entrar .note { margin: 14px 0 0; padding: 9px 12px; }
+/* criar conta: senha e confirmação lado a lado (some a rolagem) */
+.senhas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.senhas > div:only-child, .senhas > div:has(+ [hidden]) { grid-column: 1 / -1; }
+body.pg-entrar .check { margin: 14px 0 14px; height: auto; line-height: 1.2; }
+body.pg-entrar .erro:empty { min-height: 0; margin: 0; }
+/* telas mais baixas: tudo um pouco mais junto, para o "Criar conta" caber sem barra de rolagem */
+@media (min-width: 901px) and (max-height: 760px) {
+  body.pg-entrar .panel h2 { font-size: 30px; margin-bottom: 4px; }
+  body.pg-entrar .subtitle { margin-bottom: 10px; }
+  body.pg-entrar label { margin: 9px 0 5px; }
+  body.pg-entrar input { height: 40px; }
+  body.pg-entrar .field > span { top: 11px; }
+  body.pg-entrar .eye { top: 8px; }
+  body.pg-entrar .tabs button { padding: 9px 0; }
+  body.pg-entrar .primary { padding: 13px; }
+  body.pg-entrar .check { margin: 12px 0; }
+}
 
 /* ---------- páginas internas (carteira, conta, resultado) ---------- */
 body.pg-interna main { display: grid; place-items: start center;
-  background: linear-gradient(#170b28b0, #170b28dc), url(../img/plataforma/hero-competition.png) center / cover no-repeat; }
-body.pg-carteira main { background: linear-gradient(90deg, #150b27dd, #150b2766), url(../img/plataforma/wallet-bg.png) center / cover no-repeat; }
+  background: url(../img/plataforma/fundo-conta.jpg) center / cover no-repeat, #130c23; }
+body.pg-carteira main { background: url(../img/plataforma/fundo-carteira.jpg) center / cover no-repeat, #130c23; }
 body.pg-carteira .panel { max-width: 520px; background: #211332dd; }
 .big-balance { font: 800 55px var(--display); color: #ffc34f; padding: 10px 0 20px; }
 .big-balance small { font: 500 12px Inter, sans-serif; color: #b6a7c5; }
@@ -36,8 +69,10 @@ body.pg-carteira .panel { max-width: 520px; background: #211332dd; }
 .lista .vazio { color: #8e809e; font-size: 12px; padding: 10px 2px; }
 
 /* ---------- Lobby (modo Solo) ---------- */
-body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: clamp(24px, 4vw, 70px); align-items: start; padding: 32px 4.8%;
-  background: linear-gradient(180deg, rgba(12,7,25,.7), transparent 25%, transparent 70%, #120d22), url(../img/plataforma/lobby-bg.png) center top / cover no-repeat, var(--bg-2); }
+/* como na tela de referência: uma coluna no meio (painel do jogo e, embaixo, as últimas partidas) */
+body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 400px); justify-content: center; gap: 14px; align-items: start; padding: 24px 16px;
+  background: url(../img/plataforma/fundo-lobby.jpg) center / cover no-repeat, var(--bg-2); }
+.lobby-intro { display: none; }
 .lobby-intro h1 { font: 800 clamp(34px, 3vw, 56px)/1.05 var(--display); margin: 0 0 10px; text-shadow: 0 2px 16px #10091d; }
 .lobby-intro p { color: #e4dcef; font-size: 14px; line-height: 1.7; max-width: 520px; text-shadow: 0 2px 10px #000; margin: 0; }
 .match-panel { background: rgba(24,14,39,.94); border: 1px solid #ffffff20; border-radius: 20px; padding: 24px; box-shadow: 0 16px 48px #10081938; animation: entrar .35s ease-out; }
@@ -51,7 +86,7 @@ body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 1fr) minmax
 .stake .field > span { top: 13px; color: #ffc34f; }
 .stake-info { display: flex; justify-content: space-between; font-size: 11px; color: #a699b6; margin-top: 8px; }
 .match-panel .primary { margin-top: 16px; }
-.lobby-history { grid-column: 1; align-self: end; background: rgba(24,14,39,.88); border: 1px solid #ffffff16; border-radius: 18px; padding: 20px 22px; max-width: 620px; }
+.lobby-history { grid-column: 1; background: rgba(24,14,39,.88); border: 1px solid #ffffff16; border-radius: 18px; padding: 20px 22px; }
 .lobby-history .lista { margin: 0; }
 .lobby-history .lista ol { max-height: 230px; }
 
@@ -67,9 +102,16 @@ body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 1fr) minmax
 .acoes { display: grid; gap: 10px; margin-top: 18px; }
 
 @media (max-width: 900px) {
-  body.pg-entrar main { grid-template-columns: 1fr; gap: 25px; padding: 35px 6%; background-position: 30% center; }
-  body.pg-entrar .panel { justify-self: center; max-width: 470px; background: #21152eee; }
-  .hero h1 { font-size: 52px; }
+  body.pg-entrar main { grid-template-columns: 1fr; gap: 25px; padding: 35px 6%; background-position: 30% center; height: auto; min-height: 100vh; }
+  body.pg-entrar .panel { justify-self: center; max-width: 470px; background: #21152eee; max-height: none; overflow: visible; }
+  /* celular: só o logo, no centro, em cima do formulário */
+  .hero h1 { display: none; }
+  .logo-hero { position: static; margin: 0 auto; width: min(260px, 70vw); }
   body.pg-lobby main { grid-template-columns: 1fr; background-size: auto 100%; }
   .lobby-history { grid-column: 1; }
+}
+
+/* o fundo fica do tamanho da janela (não estica com a página comprida); só no computador, o celular não suporta bem */
+@media (min-width: 901px) {
+  body.pg-interna main, body.pg-carteira main, body.pg-lobby main { background-attachment: fixed; }
 }

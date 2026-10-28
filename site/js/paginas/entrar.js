@@ -1,5 +1,5 @@
-// Entrar: login, criar conta (com data de nascimento: 18+; só entra depois de confirmar o e-mail), recuperar senha
-// ou visitante (anônimo, com confirmação de 18+).
+// Entrar: login, criar conta (com data de nascimento e confirmação de 18+; só entra depois de confirmar
+// o e-mail) ou recuperar senha.
 import * as arena from '../arena.js';
 import { ocupado } from './comum.js';
 
@@ -71,6 +71,7 @@ $('auth').addEventListener('submit', e => {
         if (!$('nome').value.trim()) return falhar('Escolha um nome de jogador.', 'nome');
         if ($('confirmar').value !== senha) return falhar('As senhas precisam ser iguais.', 'confirmar');
         if (!$('nascimento').value) return falhar('Informe sua data de nascimento.', 'nascimento');
+        if (!$('maior18').checked) return falhar('Confirme que você tem 18 anos ou mais.', 'maior18');
         await arena.cadastrar({ nome: $('nome').value, email, senha, nascimento: $('nascimento').value });
         // a conta só entra depois de confirmar o e-mail
         trocarModo('entrar');
@@ -100,14 +101,6 @@ $('auth').addEventListener('submit', e => {
   });
 });
 
-$('visitante').addEventListener('click', e => {
-  erro.textContent = '';
-  if (!$('maior18').checked) return falhar('Confirme que você tem 18 anos ou mais.', 'maior18');
-  ocupado(e.currentTarget, async () => {
-    try { await arena.entrarVisitante(); location.href = 'lobby/'; }
-    catch (err) { falhar(err.message); }
-  });
-});
 $('reenviar').addEventListener('click', e => ocupado(e.currentTarget, async () => {
   erro.textContent = '';
   try { const r = await arena.reenviarConfirmacao($('email').value.trim(), $('senha').value); avisar(r.mensagem); $('reenviar').hidden = true; }
