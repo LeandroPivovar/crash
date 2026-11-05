@@ -29,6 +29,9 @@ ENV
 fi
 chmod 600 /opt/arena/arena.env
 chown -R arena:arena /opt/arena/dados
+# banco, cópias e códigos: só o usuário do serviço lê (o servidor é compartilhado com outros sites)
+chmod 700 /opt/arena/dados /opt/arena/dados/backups 2>/dev/null || true
+find /opt/arena/dados -type f -exec chmod 600 {} +
 cp /opt/arena/app/deploy/arena.service /etc/systemd/system/arena.service
 systemctl daemon-reload
 systemctl enable arena >/dev/null 2>&1

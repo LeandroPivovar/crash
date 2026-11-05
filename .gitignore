@@ -3,3 +3,5 @@ servidor/dados/
 site/data/*.gz
 _origem/
 *.log
+# relatórios de segurança com detalhes do servidor: só no computador (o repositório é público)
+docs/privado/

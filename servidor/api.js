@@ -414,6 +414,9 @@ setInterval(() => { const t = agora(); for (const [k, d] of desafios) if (d.ate 
 // Jogador anônimo (visitante): conta sem e-mail nem senha, confirmando 18+. Joga com moedas simuladas, mas
 // não saca nem ativa o app autenticador (essas rotas recusam visitante).
 rota('POST', '/api/visitante', {}, ({ corpo, res, req, ip }) => {
+  // a tela de entrada não oferece mais visitante; sem ARENA_VISITANTES=1 a rota fica fechada (antes dava para criar
+  // contas anônimas direto pela API mesmo sem o botão)
+  if (process.env.ARENA_VISITANTES !== '1') throw new Erro(404, 'Rota não encontrada.');
   limitar(`visitante:${ip}`, CONTAS_POR_HORA, 60 * 60e3, 'Muitas contas de visitante criadas daqui. Tente mais tarde.');
   if (corpo.maior18 !== true) throw new Erro(400, 'Confirme que você tem 18 anos ou mais.');
   const r = db.prepare('INSERT INTO usuarios (nome, visitante, criado) VALUES (?, 1, ?)').run('Visitante', agora());
@@ -680,11 +683,36 @@ rota('POST', '/api/partidas/([\\w-]+)/encerrar', { login: true, corpoMax: CORPO_
 // 1) iniciar: confirma a senha, gera o segredo (ainda inativo) e devolve o link otpauth:// para o app;
 // 2) confirmar: digita o código do app; ativa e devolve 8 códigos de reserva (mostrados uma vez).
 // As mesmas funções atendem /api/admin/2fa/* (página do operador) e /api/conta/2fa/* (jogador).
+// Operador: além da senha, cadastrar o app exige o código de ativação que só existe no servidor
+// (dados/codigo-ativacao-operador.txt, legível só pelo serviço). Assim, quem descobrir a senha do operador antes
+// de ele ativar o app não consegue cadastrar o próprio celular e tomar a conta.
+let codigoAtivacaoHash = null;
+function prepararCodigoAtivacao() {
+  const arq = path.join(path.dirname(require('./banco').arquivo), 'codigo-ativacao-operador.txt');
+  if (!db.prepare('SELECT 1 FROM usuarios WHERE operador = 1 AND totp_ativo = 0').get()) {
+    codigoAtivacaoHash = null;
+    try { fs.unlinkSync(arq); } catch {}
+    return;
+  }
+  const codigo = crypto.randomBytes(6).toString('hex').toUpperCase(); // novo a cada vez que o servidor sobe
+  codigoAtivacaoHash = sha(codigo);
+  try { fs.writeFileSync(arq, `${codigo}\n`, { mode: 0o600 }); } catch (e) { console.error('[2fa] não gravou o código de ativação:', e.message); }
+  console.log(`Operador sem app autenticador: código de ativação em ${arq}`);
+}
+const confereCodigoAtivacao = c => {
+  if (!codigoAtivacaoHash) return false;
+  const a = Buffer.from(sha(String(c || '').trim().toUpperCase())), b = Buffer.from(codigoAtivacaoHash);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 function iniciar2fa({ u, corpo, ip }) {
   if (u.visitante) throw new Erro(403, 'Crie uma conta para ativar a verificação em duas etapas.');
   limitar(`2fa-config:${u.id}`, 10, 15 * 60e3);
   if (u.totp_ativo) throw new Erro(409, 'O app autenticador já está ativo nesta conta.');
   if (!confereSenha(String(corpo.senha || ''), u.senha_hash)) { auditar('2fa_senha_errada', { u, ip }); throw new Erro(401, 'Senha incorreta.'); }
+  if (u.operador && !confereCodigoAtivacao(corpo.codigoAtivacao)) {
+    auditar('2fa_codigo_ativacao_errado', { u, ip });
+    throw new Erro(403, 'Código de ativação incorreto. Ele fica no servidor, no arquivo dados/codigo-ativacao-operador.txt.', 'codigo_ativacao');
+  }
   const segredo = totp.novoSegredo();
   db.prepare('UPDATE usuarios SET totp_segredo = ?, totp_ativo = 0 WHERE id = ?').run(segredo, u.id);
   return { segredo, uri: totp.uri(segredo, u.email || `conta-${u.id}`) };
@@ -703,6 +731,7 @@ function confirmar2fa({ u, corpo, ip }) {
     db.prepare('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?').run(u.id, u.sessao); // outras sessões saem
   });
   auditar('2fa_ativado', { u, ip });
+  if (u.operador) prepararCodigoAtivacao(); // ativou: o código deixa de valer (e o arquivo some)
   return { ok: true, codigosReserva: codigos };
 }
 rota('POST', '/api/admin/2fa/iniciar', { operador: true, configurar2fa: true }, iniciar2fa);
@@ -787,6 +816,7 @@ function prepararOperador() {
 async function iniciar() {
   cfg = await import(pathToFileURL(path.join(__dirname, '..', 'site', 'js', 'jogo', 'config.js')).href);
   prepararOperador();
+  prepararCodigoAtivacao();
   replay.iniciar(); // a thread de replay já carrega o nível ao subir o servidor
   require('./backup').agendar(db, require('./banco').arquivo);
 }

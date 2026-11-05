@@ -71,6 +71,10 @@
         <label for="senha-2fa">Confirme sua senha<small>Para gerar a chave do app.</small></label>
         <div class="ctrl"><input type="password" id="senha-2fa" autocomplete="current-password" class="txt"></div>
       </div>
+      <div class="field">
+        <label for="ativacao-2fa">Código de ativação<small>Fica no servidor, em dados/codigo-ativacao-operador.txt (só quem administra o servidor vê). Sem ele, a senha sozinha não cadastra o app.</small></label>
+        <div class="ctrl"><input id="ativacao-2fa" autocomplete="off" class="txt" spellcheck="false"></div>
+      </div>
       <div class="actions"><button type="button" class="primary" id="gerar-2fa">Gerar chave</button></div>
     </div>
     <div id="passo-2" hidden>
@@ -307,8 +311,8 @@ const msg2fa = t => { $('status-2fa').textContent = t || ''; };
 $('gerar-2fa').addEventListener('click', async () => {
   msg2fa();
   try {
-    const r = await arena.iniciar2fa($('senha-2fa').value);
-    $('senha-2fa').value = '';
+    const r = await arena.iniciar2fa($('senha-2fa').value, $('ativacao-2fa').value);
+    $('senha-2fa').value = ''; $('ativacao-2fa').value = '';
     $('chave-2fa').textContent = r.segredo.match(/.{1,4}/g).join(' ');
     $('link-otp').href = r.uri;
     $('passo-1').hidden = true; $('passo-2').hidden = false;

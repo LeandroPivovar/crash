@@ -24,7 +24,7 @@ Abra http://localhost:8091. Precisa de internet só para a fonte (Google Fonts);
 ARENA_ADMIN_EMAIL=voce@empresa.com ARENA_ADMIN_SENHA=uma-senha-bem-forte node servidor/serve.js 8091
 ```
 
-No primeiro acesso à página de regras, o operador ativa a **verificação em duas etapas** (app autenticador no celular: Google Authenticator, Microsoft Authenticator, Authy…). É obrigatória para mudar regras e aprovar pagamentos; depois disso, o login do operador pede a senha e o código do app. Guarde os 8 códigos de reserva mostrados na ativação.
+No primeiro acesso à página de regras, o operador ativa a **verificação em duas etapas** (com a senha e o código de ativação do servidor, em `servidor/dados/codigo-ativacao-operador.txt`; em produção, `/opt/arena/dados/`) (app autenticador no celular: Google Authenticator, Microsoft Authenticator, Authy…). É obrigatória para mudar regras e aprovar pagamentos; depois disso, o login do operador pede a senha e o código do app. Guarde os 8 códigos de reserva mostrados na ativação.
 
 Outras variáveis: `PORT`, `ARENA_DB` (arquivo do banco; padrão `servidor/dados/arena.db`), `ARENA_TLS_CERT` + `ARENA_TLS_KEY` (HTTPS no próprio servidor) e `ARENA_HTTP_REDIRECIONAR` (porta HTTP que só redireciona), `ARENA_PROXY=1` (atrás de nginx/Cloudflare com HTTPS), `ARENA_CONTAS_POR_HORA` e `ARENA_LOGINS_POR_IP` (limites anti-abuso), `ARENA_ADMIN_RESETAR_2FA=1` (desliga o app do operador, se ele perdeu o celular).
 

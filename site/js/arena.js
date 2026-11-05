@@ -90,7 +90,7 @@ export const salvarRegras = async r => normalize((await api('PUT', '/admin/regra
 export const analisesPendentes = () => api('GET', '/admin/analises');
 export const decidirAnalise = (id, decisao) => api('POST', `/admin/analises/${id}`, { decisao });
 export const auditoria = () => api('GET', '/admin/auditoria');
-export const iniciar2fa = senha => api('POST', '/admin/2fa/iniciar', { senha });
+export const iniciar2fa = (senha, codigoAtivacao) => api('POST', '/admin/2fa/iniciar', { senha, codigoAtivacao });
 export const confirmar2fa = codigo => api('POST', '/admin/2fa/confirmar', { codigo });
 // jogador (Minha conta): o app é obrigatório para sacar
 export const iniciar2faConta = senha => api('POST', '/conta/2fa/iniciar', { senha });

@@ -11,6 +11,8 @@ ExecStart=/opt/arena/node/bin/node servidor/serve.js
 Restart=always
 RestartSec=3
 # isolamento: só escreve na pasta de dados
+# arquivos criados pelo serviço (banco, cópias, código de ativação) só o próprio serviço lê
+UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

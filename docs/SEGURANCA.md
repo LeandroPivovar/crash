@@ -42,6 +42,7 @@ O que o navegador manda e o servidor **ignora para pagar**: número de frutas, d
 - A senha certa só abre um "desafio" de 5 minutos (até 5 códigos errados); a sessão só nasce com o código. Cada código vale uma vez (não dá para reaproveitar um código visto por cima do ombro).
 - 8 códigos de reserva de uso único, mostrados uma vez na ativação, para o caso de perder o celular.
 - Sessão de operador dura 12 h (a de jogador, 30 dias).
+- Cadastrar o app do operador exige, além da senha, o código de ativação que só existe no servidor (`dados/codigo-ativacao-operador.txt`, legível só pelo serviço; muda a cada reinício e some depois da ativação). Quem só descobrir a senha não toma a conta.
 - Perdeu o celular e os códigos: quem tem acesso ao servidor reinicia com `ARENA_ADMIN_RESETAR_2FA=1` e o operador cadastra o app de novo (fica registrado).
 
 **Jogadores: verificação em duas etapas e saque:**

@@ -98,10 +98,7 @@ try {
   const tokNovo = await linkDoEmail(emailNovo);
   conferir('link de confirmação certo entra', (await novo('POST', '/api/confirmar', { token: tokNovo })).s === 200 && (await novo('GET', '/api/eu')).j.usuario?.email === emailNovo);
   conferir('link de confirmação não vale duas vezes', (await cliente()('POST', '/api/confirmar', { token: tokNovo })).s === 400);
-  conferir('visitante sem confirmar 18+', (await cliente()('POST', '/api/visitante', {})).s === 400);
-  const vis = cliente(); await vis('POST', '/api/visitante', { maior18: true }); await vis('POST', '/api/carteira/deposito', { valor: 5000 });
-  conferir('visitante tentando sacar', (await vis('POST', '/api/carteira/saque', { valor: 1000, codigo: '123456' })).s === 403);
-  conferir('visitante tentando ativar o app autenticador', (await vis('POST', '/api/conta/2fa/iniciar', { senha: 'x' })).s === 403);
+  conferir('criar conta anônima direto pela API (sem o botão de visitante)', (await cliente()('POST', '/api/visitante', { maior18: true })).s === 404);
   conferir('cookie de sessão inventado', (await cliente()('GET', '/api/eu', undefined, { cookie: 'arena_sessao=' + 'A'.repeat(43) })).j.usuario === null);
   const alvo = await novaConta('Alvo'); const emailAlvo = (await alvo('GET', '/api/eu')).j.usuario.email;
   const atac = cliente();
@@ -185,7 +182,13 @@ try {
   const semApp = await op('PUT', '/api/admin/regras', { regras: {} });
   conferir('operador sem app autenticador não muda regras', semApp.s === 403 && semApp.j.codigo === 'configurar_2fa');
   conferir('ativar o app exige a senha', (await op('POST', '/api/admin/2fa/iniciar', { senha: 'errada-errada' })).s === 401);
-  const { segredo } = (await op('POST', '/api/admin/2fa/iniciar', { senha: OP.senha })).j;
+  // quem só sabe a senha não cadastra o próprio celular: falta o código que fica no servidor
+  const semCodigo = await op('POST', '/api/admin/2fa/iniciar', { senha: OP.senha });
+  conferir('senha certa do operador sem o código de ativação do servidor', semCodigo.s === 403 && semCodigo.j.codigo === 'codigo_ativacao');
+  conferir('código de ativação chutado', (await op('POST', '/api/admin/2fa/iniciar', { senha: OP.senha, codigoAtivacao: 'ABCDEF123456' })).s === 403);
+  const arqAtivacao = path.join(path.dirname(dbArq), 'codigo-ativacao-operador.txt');
+  const codigoAtivacao = fs.readFileSync(arqAtivacao, 'utf8').trim();
+  const { segredo } = (await op('POST', '/api/admin/2fa/iniciar', { senha: OP.senha, codigoAtivacao })).j;
   conferir('código errado não ativa o app', (await op('POST', '/api/admin/2fa/confirmar', { codigo: '000000' })).s === 400 || totp.codigoNoIntervalo(segredo, Math.floor(Date.now() / 30000)) === '000000');
   const ativado = (await op('POST', '/api/admin/2fa/confirmar', { codigo: totp.codigoNoIntervalo(segredo, Math.floor(Date.now() / 30000)) })).j;
   const reserva = ativado.codigosReserva;
@@ -233,6 +236,11 @@ try {
     `${g.frutas} frutas, recebeu ${fimD.recebido}, verificação ${fimD.verificacao}, análise ${fimD.analise}`);
 
   // pagamento alto: operador baixa o limite de análise para 0,1× → vai para análise e só paga se aprovar
+  // regras com campos a mais e valores fora da faixa: o servidor só guarda os campos conhecidos, dentro dos limites
+  const injetadas = (await op('PUT', '/api/admin/regras', { regras: { dificuldade: 999, operador: 1, saldo: 1e9, fruitPercent: -5, enemiesPerChunk: 500, speedMax: 'x' } })).j.regras;
+  conferir('regras com campos a mais e valores absurdos', injetadas.dificuldade === 100 && !('operador' in injetadas) && !('saldo' in injetadas) && injetadas.fruitPercent >= 0.01 && injetadas.enemiesPerChunk <= 8,
+    `dificuldade ${injetadas.dificuldade}, inimigos ${injetadas.enemiesPerChunk}, fruta ${injetadas.fruitPercent}%`);
+  conferir('código de ativação some depois de ativar', !fs.existsSync(arqAtivacao));
   await op('PUT', '/api/admin/regras', { regras: { analiseAcimaDe: 1, fruitPercent: 60 } });
   let pe, ge;
   for (let k = 0; k < 6; k++) {
