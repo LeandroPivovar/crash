@@ -14,7 +14,41 @@ export const DEFAULTS = {
   pitsMin: 0,             // buracos por chunk: o trecho é sorteado entre os que têm de pitsMin a pitsMax
   pitsMax: 2,              // buracos (cada trecho da fase real tem 0, 1 ou 2; o chunk junta vários se preciso)
   analiseAcimaDe: 5,       // servidor: pagamento acima de N × a entrada vai para análise do operador antes de creditar
+  dificuldade: null,       // posição da barra de dificuldade (0–100) que gerou estas regras; null = ajuste à mão
 };
+
+// Barra de dificuldade: seis níveis de referência (medidos com o robô de teste; a distância média cai a cada nível:
+// ~1 200 m, ~360, ~270, ~180, ~125 e ~45). A barra vai de 0 a 100 e interpola entre eles, então cada ponto é um
+// pouco mais difícil que o anterior. Só mexe em inimigos, buracos e velocidade; frutas e pagamento ficam como estão.
+export const DIFICULDADES = [
+  { nome: 'Muito fácil',   desc: 'Sem inimigos, quase sem buracos e devagar.',
+    enemiesPerChunk: 0, enemiesStart: 0, pitsMin: 0, pitsMax: 1, speedStart: 0.9,  speedGain: 0.02,  speedMax: 1.1 },
+  { nome: 'Fácil',         desc: 'Poucos inimigos e buracos; acelera devagar.',
+    enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 2, speedStart: 0.95, speedGain: 0.04,  speedMax: 1.35 },
+  { nome: 'Normal',        desc: 'Perto do jogo original.',
+    enemiesPerChunk: 2, enemiesStart: 1, pitsMin: 1, pitsMax: 2, speedStart: 1.0,  speedGain: 0.058, speedMax: 1.6 },
+  { nome: 'Difícil',       desc: 'Mais inimigos e buracos, e bem mais rápido.',
+    enemiesPerChunk: 3, enemiesStart: 2, pitsMin: 1, pitsMax: 3, speedStart: 1.15, speedGain: 0.08,  speedMax: 1.9 },
+  { nome: 'Muito difícil', desc: 'Para quem já domina o jogo.',
+    enemiesPerChunk: 5, enemiesStart: 4, pitsMin: 2, pitsMax: 5, speedStart: 1.35, speedGain: 0.12,  speedMax: 2.4 },
+  { nome: 'Impossível',    desc: 'Inimigos e buracos no máximo, velocidade extrema.',
+    enemiesPerChunk: 8, enemiesStart: 8, pitsMin: 4, pitsMax: 8, speedStart: 1.8,  speedGain: 0.2,   speedMax: 3.5 },
+];
+// regras de inimigos, buracos e velocidade para a posição v da barra (0 = mais fácil, 100 = impossível)
+export function regrasDaDificuldade(v) {
+  const p = Math.max(0, Math.min(100, Number(v) || 0)) / 100 * (DIFICULDADES.length - 1);
+  const i = Math.min(DIFICULDADES.length - 2, Math.floor(p)), t = p - i, a = DIFICULDADES[i], b = DIFICULDADES[i + 1];
+  const mix = (k, casas) => { const x = a[k] + (b[k] - a[k]) * t; const f = 10 ** casas; return Math.round(x * f) / f; };
+  const r = {
+    enemiesPerChunk: mix('enemiesPerChunk', 0), enemiesStart: mix('enemiesStart', 0),
+    pitsMin: mix('pitsMin', 0), pitsMax: mix('pitsMax', 0),
+    speedStart: mix('speedStart', 2), speedGain: mix('speedGain', 3), speedMax: mix('speedMax', 2),
+  };
+  if (r.pitsMax < r.pitsMin) r.pitsMax = r.pitsMin;
+  return r;
+}
+// nome do nível para a posição v (a faixa mais próxima)
+export const nomeDaDificuldade = v => DIFICULDADES[Math.round(Math.max(0, Math.min(100, Number(v) || 0)) / 100 * (DIFICULDADES.length - 1))];
 
 // buracos: qualquer valor até 99 (o chunk junta trechos da fase até somar o número sorteado)
 export const LIMITS = { enemies: 8, enemiesStart: 8, fruit: 10, pits: 99 };
@@ -47,6 +81,7 @@ export function normalize(c) {
     pitsMin: clampInt(o.pitsMin, 0, LIMITS.pits, d.pitsMin),
     pitsMax: clampInt(o.pitsMax, 0, LIMITS.pits, d.pitsMax),
     analiseAcimaDe: clampNum(o.analiseAcimaDe, 1, 1000, d.analiseAcimaDe),
+    dificuldade: o.dificuldade === null || o.dificuldade === undefined || o.dificuldade === '' ? null : clampInt(o.dificuldade, 0, 100, null),
   };
   if (out.fruitMax < out.fruitMin) out.fruitMax = out.fruitMin;
   if (out.pitsMax < out.pitsMin) out.pitsMax = out.pitsMin;
