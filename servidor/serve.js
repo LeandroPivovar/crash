@@ -25,7 +25,9 @@ function scriptsEmbutidos(file, data, mtime) {
   if (c && c.mtime === mtime) return c.hashes;
   const hashes = [];
   for (const m of data.toString('utf8').matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
-    hashes.push(`'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
+    // o navegador troca CRLF por LF antes de conferir o hash (checkout no Windows vem com CRLF)
+    const texto = m[1].replace(/\r\n?/g, '\n');
+    hashes.push(`'sha256-${crypto.createHash('sha256').update(texto, 'utf8').digest('base64')}'`);
   }
   hashesDaPagina.set(file, { mtime, hashes });
   return hashes;

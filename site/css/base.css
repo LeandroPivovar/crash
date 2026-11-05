@@ -28,7 +28,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #ffc056; outline-offs
 /* ---------- cabeçalho ---------- */
 #topo { height: 64px; display: flex; align-items: center; gap: 35px; padding: 0 4%; background: var(--bg-2); position: relative; z-index: 5; }
 .brand { display: flex; align-items: center; flex: 0 0 auto; text-decoration: none; }
-.brand img { display: block; width: 178px; height: 38px; }
+.brand img { display: block; width: auto; height: 52px; filter: drop-shadow(0 2px 4px #0008); }
 #topo nav { display: flex; gap: 27px; height: 100%; align-items: center; }
 #topo nav a { white-space: nowrap; color: #a69eb8; text-decoration: none; font-size: 13px; font-weight: 600; height: 100%; display: flex; align-items: center; }
 #topo nav a.ativo { color: #ffb84a; }

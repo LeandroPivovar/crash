@@ -66,7 +66,7 @@
   #carregando[hidden] { display: none; }
   .load-card { width: min(420px, 100%); background: linear-gradient(140deg, #2b1c3beb, #1a1428f5); border: 1px solid #ffffff20; border-radius: 24px;
     padding: 30px; text-align: center; box-shadow: 0 22px 70px #08041266; color: #fff; font-family: Inter, system-ui, sans-serif; }
-  .load-logo { width: 190px; height: 40px; }
+  .load-logo { display: block; width: 220px; height: auto; aspect-ratio: 390 / 201; object-fit: contain; margin: 0 auto; filter: drop-shadow(0 4px 10px #0008); }
   .load-card h2 { margin: 16px 0 4px; font: 800 32px "Barlow Condensed", Impact, sans-serif; }
   .load-card p { margin: 0 0 18px; color: #aaa3bd; font-size: 13px; }
   .load-bar { height: 10px; background: #100b1d; border: 1px solid #ffffff1b; border-radius: 6px; overflow: hidden; }
@@ -79,7 +79,7 @@
   .toque-zona { position: fixed; inset: 0; z-index: 40; touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
   .toque-zona span { font: 700 12px Inter, system-ui, sans-serif; color: #ffffffb0; background: rgba(16,11,32,.45); border-radius: 20px; padding: 6px 12px; transition: opacity 1s; }
   body.toque-usado .toque-zona span { opacity: 0; } /* a dica some depois do primeiro uso */
-  #gameover img, #startscreen img { width: 100%; height: 100%; object-fit: contain; } /* imagem inteira, sem cortes */
+  #gameover img, #startscreen img { width: 100%; height: 100%; object-fit: cover; object-position: center 35%; } /* tela cheia, sem faixas pretas nos lados */
   #startscreen picture, #gameover picture { display: block; width: 100%; height: 100%; }
   #gameover:not([hidden]) ~ #help { display: none; }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
@@ -87,6 +87,7 @@
   body:has(#gameover:not([hidden])) #scoreboard { display: none; } /* pedido: sem os pontos na tela de fim */
   #help { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(24,14,39,.85); border: 1px solid #ffffff1b; border-radius: 10px; padding: 7px 14px; color: #c9bcd8; white-space: nowrap; font: 500 12px Inter, system-ui, sans-serif; }
   body.toque #help { display: none; }
+  #help { display: none; } /* pedido: sem a barra de dicas embaixo da tela */
   canvas { touch-action: none; }
   /* celular: nada de zoom com toque duplo ou pinça, nem seleção/menu ao segurar (o jogo usa a tela toda) */
   html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -128,7 +129,7 @@
 <div id="scoreboard" hidden><img src="../img/jogo/score-board.png" alt="Saldo R$"><div class="digits"></div></div>
 <div id="carregando" role="status" aria-live="polite">
   <div class="load-card">
-    <img class="load-logo" src="../img/plataforma/logo-horizontal.svg" alt="Crash Arena">
+    <img class="load-logo" src="../img/plataforma/logo-arena-crush.png" alt="Arena Crush" width="390" height="201">
     <h2>Carregando a ilha…</h2>
     <p>N. Sanity Beach · Desafio solo</p>
     <div class="load-bar" aria-hidden="true"><i id="carregando-barra"></i></div>
@@ -139,20 +140,20 @@
 <div id="startscreen" hidden>
   <picture>
     <source media="(orientation: portrait) and (max-width: 900px)" srcset="../img/jogo/start-celular.jpg"><!-- celular em pé -->
-    <img src="../img/jogo/start-v2.jpg" alt="Start — pressione espaço">
+    <img src="../img/jogo/start.jpg" alt="Start — pressione espaço">
   </picture>
   <div class="start-barra">
     <button type="button" id="start-lobby">← Lobby <small>(devolve a entrada)</small></button>
-    <span class="start-dica so-teclado">Espaço: começar · Esc: voltar</span>
-    <span class="start-dica so-toque">Toque para começar</span>
+    <span class="start-dica so-teclado">Esc: voltar</span>
+    <span class="start-dica so-toque"></span><!-- "toque para começar" já está na imagem; aqui só aparecem erros -->
   </div>
 </div>
 <div id="toque" aria-hidden="true">
   <div class="toque-zona"><span>arraste ◀ ▶ para desviar · ▲ para pular</span></div>
 </div>
 <div id="gameover" hidden><picture>
-  <source media="(orientation: portrait) and (max-width: 900px)" srcset="../img/jogo/game-over-celular.jpg"><!-- celular em pé -->
-  <img src="../img/jogo/game-over.png" alt="Partida encerrada">
+  <source media="(orientation: portrait) and (max-width: 900px)" srcset="../img/jogo/fim-celular.jpg"><!-- celular em pé -->
+  <img src="../img/jogo/fim.jpg" alt="Partida encerrada">
 </picture></div>
 <div id="overlay" hidden>
   <div class="box">
