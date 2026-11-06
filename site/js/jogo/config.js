@@ -25,35 +25,41 @@ export const FLUXO_TAM = 10;
 // Barra de dificuldade: seis níveis de referência (medidos com o robô de teste; a distância média cai a cada nível:
 // ~1 200 m, ~360, ~270, ~180, ~125 e ~45). A barra vai de 0 a 100 e interpola entre eles, então cada ponto é um
 // pouco mais difícil que o anterior. Só mexe em inimigos, buracos e velocidade; frutas e pagamento ficam como estão.
+// A barra mexe principalmente em DUAS coisas: quantas frutas o jogador precisa pegar para recuperar o valor
+// depositado (empate → valor de cada fruta) e o quanto o jogo acelera. Velocidade inicial, inimigos e buracos
+// quase não mudam, para o jogo continuar jogável em qualquer nível.
 export const DIFICULDADES = [
-  { nome: 'Muito fácil',   desc: 'Sem inimigos, quase sem buracos e devagar.',
-    enemiesPerChunk: 0, enemiesStart: 0, pitsMin: 0, pitsMax: 1, speedStart: 0.9,  speedGain: 0.02,  speedMax: 1.1 },
-  { nome: 'Fácil',         desc: 'Poucos inimigos e buracos; acelera devagar.',
-    enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 2, speedStart: 0.95, speedGain: 0.04,  speedMax: 1.35 },
-  { nome: 'Normal',        desc: 'Perto do jogo original.',
-    enemiesPerChunk: 2, enemiesStart: 1, pitsMin: 1, pitsMax: 2, speedStart: 1.0,  speedGain: 0.058, speedMax: 1.6 },
-  { nome: 'Difícil',       desc: 'Mais inimigos e buracos, e bem mais rápido.',
-    enemiesPerChunk: 3, enemiesStart: 2, pitsMin: 1, pitsMax: 3, speedStart: 1.15, speedGain: 0.08,  speedMax: 1.9 },
-  { nome: 'Muito difícil', desc: 'Para quem já domina o jogo.',
-    enemiesPerChunk: 5, enemiesStart: 4, pitsMin: 2, pitsMax: 5, speedStart: 1.35, speedGain: 0.12,  speedMax: 2.4 },
-  { nome: 'Impossível',    desc: 'Inimigos e buracos no máximo, velocidade extrema.',
-    enemiesPerChunk: 8, enemiesStart: 8, pitsMin: 4, pitsMax: 8, speedStart: 1.8,  speedGain: 0.2,   speedMax: 3.5 },
+  { nome: 'Muito fácil',   desc: '10 frutas recuperam o depósito; quase não acelera.',
+    empate: 10, speedGain: 0.02,  speedMax: 1.2, speedStart: 0.9,  enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 2 },
+  { nome: 'Fácil',         desc: '15 frutas recuperam o depósito; acelera devagar.',
+    empate: 15, speedGain: 0.04,  speedMax: 1.4, speedStart: 0.9,  enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 2 },
+  { nome: 'Normal',        desc: '20 frutas recuperam o depósito; aceleração do jogo original.',
+    empate: 20, speedGain: 0.058, speedMax: 1.6, speedStart: 0.95, enemiesPerChunk: 2, enemiesStart: 1, pitsMin: 1, pitsMax: 2 },
+  { nome: 'Difícil',       desc: '30 frutas recuperam o depósito; acelera bem mais.',
+    empate: 30, speedGain: 0.09,  speedMax: 2.0, speedStart: 1.0,  enemiesPerChunk: 2, enemiesStart: 1, pitsMin: 1, pitsMax: 2 },
+  { nome: 'Muito difícil', desc: '45 frutas recuperam o depósito; acelera rápido.',
+    empate: 45, speedGain: 0.13,  speedMax: 2.6, speedStart: 1.0,  enemiesPerChunk: 2, enemiesStart: 1, pitsMin: 1, pitsMax: 3 },
+  { nome: 'Impossível',    desc: '80 frutas recuperam o depósito; aceleração extrema.',
+    empate: 80, speedGain: 0.2,   speedMax: 3.5, speedStart: 1.05, enemiesPerChunk: 3, enemiesStart: 1, pitsMin: 1, pitsMax: 3 },
 ];
-// regras de inimigos, buracos e velocidade para a posição v da barra (0 = mais fácil, 100 = impossível)
+// regras para a posição v da barra (0 = mais fácil, 100 = impossível)
 export function regrasDaDificuldade(v) {
   const p = Math.max(0, Math.min(100, Number(v) || 0)) / 100 * (DIFICULDADES.length - 1);
   const i = Math.min(DIFICULDADES.length - 2, Math.floor(p)), t = p - i, a = DIFICULDADES[i], b = DIFICULDADES[i + 1];
   const mix = (k, casas) => { const x = a[k] + (b[k] - a[k]) * t; const f = 10 ** casas; return Math.round(x * f) / f; };
+  const empate = mix('empate', 0);
   const r = {
+    // valor de cada fruta (%) arredondado para cima, para `empate` frutas bastarem (100/30 = 3,334 % → 30 frutas)
+    fruitPercent: Math.ceil(100 / empate * 1000) / 1000,
+    speedStart: mix('speedStart', 2), speedGain: mix('speedGain', 3), speedMax: mix('speedMax', 2),
     enemiesPerChunk: mix('enemiesPerChunk', 0), enemiesStart: mix('enemiesStart', 0),
     pitsMin: mix('pitsMin', 0), pitsMax: mix('pitsMax', 0),
-    speedStart: mix('speedStart', 2), speedGain: mix('speedGain', 3), speedMax: mix('speedMax', 2),
   };
   if (r.pitsMax < r.pitsMin) r.pitsMax = r.pitsMin;
   return r;
 }
-// Regras de uma partida na posição `posicao` (0..FLUXO_TAM−1) do fluxo: as gerais, com inimigos, buracos e
-// velocidade trocados pelos da dificuldade daquela posição (se ela tiver uma).
+// Regras de uma partida na posição `posicao` (0..FLUXO_TAM−1) do fluxo: as gerais, com valor da fruta, velocidade,
+// inimigos e buracos trocados pelos da dificuldade daquela posição (se ela tiver uma).
 export function regrasNoFluxo(regras, posicao) {
   const r = normalize(regras), d = r.fluxo[posicao];
   return d === null ? r : normalize({ ...r, ...regrasDaDificuldade(d), dificuldade: d });

@@ -259,14 +259,14 @@ try {
   await op('PUT', '/api/admin/regras', { regras: { fluxo: [0, 100] } });
   const fx = await novaConta('Fluxo'); await fx('POST', '/api/carteira/deposito', { valor: 100000 });
   const p1 = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
-  conferir('1ª partida usa a dificuldade da posição 1', p1.regras.fluxoPosicao === 1 && p1.regras.enemiesPerChunk === 0 && p1.regras.dificuldade === 0, `posição ${p1.regras.fluxoPosicao}, inimigos ${p1.regras.enemiesPerChunk}`);
+  conferir('1ª partida usa a dificuldade da posição 1', p1.regras.fluxoPosicao === 1 && p1.regras.fruitPercent === 10 && p1.regras.speedGain === 0.02 && p1.regras.dificuldade === 0, `posição ${p1.regras.fluxoPosicao}, fruta ${p1.regras.fruitPercent}%, aceleração ${p1.regras.speedGain}`);
   await fx('POST', `/api/partidas/${p1.id}/cancelar`);
   const p1b = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
   conferir('partida cancelada antes do START não avança o fluxo', p1b.regras.fluxoPosicao === 1);
   await fx('POST', `/api/partidas/${p1b.id}/comecar`);
   await fx('POST', `/api/partidas/${p1b.id}/encerrar`, { rle: [[8, 30]], frutas: 0 });
   const p2 = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
-  conferir('2ª partida usa a dificuldade da posição 2', p2.regras.fluxoPosicao === 2 && p2.regras.enemiesPerChunk === 8 && p2.regras.speedStart === 1.8, `posição ${p2.regras.fluxoPosicao}, inimigos ${p2.regras.enemiesPerChunk}, velocidade ${p2.regras.speedStart}`);
+  conferir('2ª partida usa a dificuldade da posição 2', p2.regras.fluxoPosicao === 2 && p2.regras.fruitPercent === 1.25 && p2.regras.speedGain === 0.2, `posição ${p2.regras.fluxoPosicao}, fruta ${p2.regras.fruitPercent}%, aceleração ${p2.regras.speedGain}`);
   await fx('POST', `/api/partidas/${p2.id}/cancelar`);
   conferir('jogador não muda o próprio fluxo', (await fx('PUT', '/api/admin/regras', { regras: { fluxo: [0, 0, 0] } })).s === 403);
 

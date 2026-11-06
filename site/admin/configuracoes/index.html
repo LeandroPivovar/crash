@@ -118,7 +118,7 @@
       <input type="range" id="dificuldade" min="0" max="100" step="1" aria-describedby="dif-desc">
       <div class="dif-escala"><span>Muito fácil</span><span>Fácil</span><span>Normal</span><span>Difícil</span><span>Muito difícil</span><span>Impossível</span></div>
       <p class="hint" id="dif-desc"></p>
-      <small style="color:var(--muted)">Arrastar a barra preenche inimigos, buracos e velocidade abaixo (frutas e pagamento não mudam). Depois é só salvar. Mexer num desses campos à mão vira "Personalizado".</small>
+      <small style="color:var(--muted)">Arrastar a barra muda principalmente <b>quantas frutas recuperam o depósito</b> (valor de cada fruta) e <b>a aceleração</b>; velocidade inicial, inimigos e buracos mudam pouco. Depois é só salvar. Mexer num desses campos à mão vira "Personalizado".</small>
     </section>
 
     <section>
@@ -232,7 +232,7 @@ $('fruitPercent').addEventListener('input', showBreakEven);
 
 // ---- barra de dificuldade ----
 let dificuldade = null; // posição da barra que gerou os valores atuais; null = ajuste à mão
-const CAMPOS_DIF = ['enemiesPerChunk', 'enemiesStart', 'pitsMin', 'pitsMax', 'speedStart', 'speedGain', 'speedMax'];
+const CAMPOS_DIF = ['fruitPercent', 'speedGain', 'speedMax', 'speedStart', 'enemiesPerChunk', 'enemiesStart', 'pitsMin', 'pitsMax'];
 function mostrarDificuldade() {
   const nome = $('dif-nome');
   if (dificuldade === null) {
@@ -251,7 +251,8 @@ $('dificuldade').addEventListener('input', e => {
   const r = regrasDaDificuldade(dificuldade);
   $('enemiesAuto').checked = false;
   $('enemiesPerChunk').disabled = false;
-  for (const k of CAMPOS_DIF) $(k).value = r[k];
+  for (const k of CAMPOS_DIF) $(k).value = k === 'fruitPercent' ? String(r[k]).replace('.', ',') : r[k];
+  showBreakEven();
   mostrarDificuldade();
 });
 // mexer à mão num campo que a barra controla: vira "Personalizado"
