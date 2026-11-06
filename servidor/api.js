@@ -72,6 +72,14 @@ const sha = t => crypto.createHash('sha256').update(t).digest('hex');
 const ehHttps = req => req.socket.encrypted || (ATRAS_DE_PROXY && req.headers['x-forwarded-proto'] === 'https');
 const ipDe = req => (ATRAS_DE_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '';
 
+// ---------- admin local (testes) ----------
+// Só com o servidor iniciado com --admin-local (ver serve.js) e só para pedidos do próprio computador: endereço
+// de loopback, Host localhost e sem cabeçalhos de proxy. Aí as rotas de operador não pedem login.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const adminLocal = req => process.env.ARENA_ADMIN_LOCAL === '1' && !ATRAS_DE_PROXY
+  && LOOPBACK.has(req.socket.remoteAddress) && !req.headers['x-forwarded-for'] && !req.headers['x-forwarded-proto']
+  && /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host || '');
+
 // ---------- auditoria ----------
 function auditar(evento, { u = null, ip = null, detalhe = null } = {}) {
   try {
@@ -603,8 +611,13 @@ rota('POST', '/api/partidas', { login: true }, async ({ u, corpo }) => {
     if (entrada > saldo(u.id)) throw new Erro(400, 'Saldo insuficiente para essa entrada.');
     const id = 'p_' + crypto.randomBytes(12).toString('base64url');
     const semente = crypto.randomInt(0, 2 ** 31);
+    // fluxo de partidas: a N-ª partida do jogador (sem contar as canceladas antes do START) usa a dificuldade da
+    // posição N do fluxo; depois da última, recomeça. As regras ficam congeladas na partida (o replay usa estas).
+    const feitas = db.prepare("SELECT COUNT(*) AS n FROM partidas WHERE usuario_id = ? AND estado <> 'cancelada'").get(u.id).n;
+    const posicao = feitas % cfg.FLUXO_TAM;
+    const regras = { ...cfg.regrasNoFluxo(regrasAtuais(), posicao), fluxoPosicao: posicao + 1 };
     db.prepare("INSERT INTO partidas (id, usuario_id, entrada, semente, regras, estado, criada) VALUES (?, ?, ?, ?, ?, 'criada', ?)")
-      .run(id, u.id, entrada, semente, JSON.stringify(regrasAtuais()), agora());
+      .run(id, u.id, entrada, semente, JSON.stringify(regras), agora());
     lancar(u.id, 'entrada', -entrada, 'Entrada · Desafio solo', id);
     return { partida: partidaPublica(db.prepare('SELECT * FROM partidas WHERE id = ?').get(id)), saldo: saldo(u.id) };
   });
@@ -750,6 +763,7 @@ rota('POST', '/api/conta/2fa/desativar', { login: true }, ({ u, corpo, ip }) => 
   return { ok: true };
 });
 
+rota('GET', '/api/admin/local', {}, ({ req }) => ({ local: adminLocal(req) }));
 // regras (o jogo lê as da partida; o operador edita as atuais)
 rota('GET', '/api/regras', {}, () => ({ regras: regrasAtuais() }));
 rota('PUT', '/api/admin/regras', { operador: true }, ({ corpo, u, ip }) => {
@@ -841,7 +855,12 @@ async function atender(req, res, url) {
       if (origem && origem !== `${ehHttps(req) ? 'https' : 'http'}://${req.headers.host}`) throw new Erro(403, 'Pedido recusado.');
     }
     const corpo = metodo === 'GET' ? {} : await lerCorpo(req, achada.corpoMax || CORPO_PADRAO);
-    const u = usuarioDaSessao(req);
+    let u = usuarioDaSessao(req);
+    // admin local (testes no computador): rotas de operador sem login, como o primeiro operador do banco
+    if (achada.operador && !achada.configurar2fa && adminLocal(req)) {
+      const op = db.prepare('SELECT * FROM usuarios WHERE operador = 1 ORDER BY id LIMIT 1').get();
+      if (op) u = { ...op, totp_ativo: 1, dois_fatores: 1, sessao: null };
+    }
     if ((achada.login || achada.operador) && !u) throw new Erro(401, 'Entre na sua conta.');
     if (achada.operador && !u.operador) { auditar('acesso_negado_operador', { u, ip, detalhe: url }); throw new Erro(403, 'Só o operador pode fazer isso.'); }
     // ações de operador exigem o app autenticador ativo e a sessão aberta com o código

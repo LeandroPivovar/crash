@@ -13,6 +13,16 @@ const types = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.txt': 'text/plain; charset=utf-8',
 };
 const port = Number(process.env.PORT) || Number(process.argv[2]) || 8091;
+// --admin-local: abre as regras do operador SEM login, só para pedidos do próprio computador (testes locais).
+// Nunca em produção: com proxy, HTTPS ou endereço público configurados, o servidor nem sobe.
+if (process.argv.includes('--admin-local')) {
+  if (process.env.ARENA_PROXY === '1' || process.env.ARENA_TLS_CERT || /^https:/.test(process.env.ARENA_SITE_URL || '')) {
+    console.error('--admin-local é só para testes no computador; não use com ARENA_PROXY, ARENA_TLS_CERT ou ARENA_SITE_URL.');
+    process.exit(1);
+  }
+  process.env.ARENA_ADMIN_LOCAL = '1';
+  console.log('ATENÇÃO: admin local ligado (regras sem login para http://localhost). Só para testes.');
+}
 // ARENA_HOST=127.0.0.1 atrás de proxy (nginx): o servidor não fica acessível direto pela internet
 const host = process.env.ARENA_HOST || undefined;
 const HTTPS = req => req.socket.encrypted || (process.env.ARENA_PROXY === '1' && req.headers['x-forwarded-proto'] === 'https');

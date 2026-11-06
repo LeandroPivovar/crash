@@ -90,6 +90,8 @@ export const salvarRegras = async r => normalize((await api('PUT', '/admin/regra
 export const analisesPendentes = () => api('GET', '/admin/analises');
 export const decidirAnalise = (id, decisao) => api('POST', `/admin/analises/${id}`, { decisao });
 export const auditoria = () => api('GET', '/admin/auditoria');
+// admin local (servidor de testes com --admin-local, acessado em localhost): regras sem login
+export const adminLocal = async () => { try { return (await api('GET', '/admin/local')).local; } catch { return false; } };
 export const iniciar2fa = (senha, codigoAtivacao) => api('POST', '/admin/2fa/iniciar', { senha, codigoAtivacao });
 export const confirmar2fa = codigo => api('POST', '/admin/2fa/confirmar', { codigo });
 // jogador (Minha conta): o app é obrigatório para sacar

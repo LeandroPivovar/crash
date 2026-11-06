@@ -54,12 +54,24 @@
     background: linear-gradient(90deg, #3fbf6a, #c9d443 30%, #ff9a3c 60%, #ff4d4d 85%, #8b0000) center / 100% 8px no-repeat; border-radius: 4px; }
   .dif-escala { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 2px; }
   #dif-nome.personalizado { color: var(--muted); }
+  /* fluxo de partidas */
+  .fluxo-linha { display: grid; grid-template-columns: 74px 1fr 118px; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+  .fluxo-linha:first-of-type { border-top: 0; }
+  .fluxo-linha b { font-size: 14px; }
+  .fluxo-linha input[type=range] { width: 100%; accent-color: var(--accent); }
+  .fluxo-linha input[type=range]:disabled { opacity: .3; }
+  .fluxo-nivel { display: flex; flex-direction: column; align-items: flex-end; font-size: 13px; }
+  .fluxo-nivel span { color: var(--accent); font-weight: 700; }
+  .fluxo-nivel.padrao span { color: var(--muted); }
+  .fluxo-nivel label { color: var(--muted); font-weight: 400; display: flex; gap: 4px; align-items: center; }
+  .aviso-local { background: #3b2a06; border: 1px solid #ff9a3c; color: #ffd9a8; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 14px; }
   @media (max-width: 420px) { .field { flex-direction: column; align-items: flex-start; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Configurações</h1>
+  <div class="aviso-local" id="aviso-local" hidden><b>Modo local de teste:</b> esta página está aberta sem login porque o servidor foi iniciado com <code>--admin-local</code> neste computador. No site publicado ela continua exigindo o operador e o app autenticador.</div>
   <p class="sub">Regras do Desafio solo (operador). Ficam salvas no servidor e valem para todas as partidas criadas depois de salvar.</p>
   <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador pode mudar as regras.</p><a class="btn" href="/">Entrar com a conta de operador</a></section>
 
@@ -107,6 +119,12 @@
       <div class="dif-escala"><span>Muito fácil</span><span>Fácil</span><span>Normal</span><span>Difícil</span><span>Muito difícil</span><span>Impossível</span></div>
       <p class="hint" id="dif-desc"></p>
       <small style="color:var(--muted)">Arrastar a barra preenche inimigos, buracos e velocidade abaixo (frutas e pagamento não mudam). Depois é só salvar. Mexer num desses campos à mão vira "Personalizado".</small>
+    </section>
+
+    <section>
+      <h2>Fluxo de partidas</h2>
+      <p class="hint" style="margin-bottom:10px">Cada jogador passa por <b>10 partidas</b> seguidas: a 1ª usa a dificuldade da posição 1, a 2ª a da posição 2… Depois da 10ª, recomeça da 1. Vale para todos os jogadores. Partida cancelada antes do START não conta. <b>Padrão</b> = usa a dificuldade geral acima.</p>
+      <div id="fluxo"></div>
     </section>
 
     <section>
@@ -195,7 +213,7 @@
   </section>
 </main>
 <script type="module">
-import { DEFAULTS, breakEvenFruits, normalize, regrasDaDificuldade, nomeDaDificuldade } from '../../js/jogo/config.js';
+import { DEFAULTS, breakEvenFruits, normalize, regrasDaDificuldade, nomeDaDificuldade, FLUXO_TAM } from '../../js/jogo/config.js';
 import * as arena from '../../js/arena.js';
 
 const $ = id => document.getElementById(id);
@@ -239,7 +257,35 @@ $('dificuldade').addEventListener('input', e => {
 // mexer à mão num campo que a barra controla: vira "Personalizado"
 for (const k of [...CAMPOS_DIF, 'enemiesAuto']) $(k).addEventListener('input', () => { dificuldade = null; mostrarDificuldade(); });
 
+// ---- fluxo de partidas: uma barra de dificuldade por posição ----
+const fluxoEl = $('fluxo');
+for (let i = 0; i < FLUXO_TAM; i++) {
+  const linha = document.createElement('div');
+  linha.className = 'fluxo-linha';
+  linha.innerHTML = `<b>Partida ${i + 1}</b>
+    <input type="range" min="0" max="100" step="1" value="40" id="fluxo-${i}" aria-label="Dificuldade da partida ${i + 1}">
+    <div class="fluxo-nivel" id="fluxo-nivel-${i}"><span></span><label><input type="checkbox" id="fluxo-padrao-${i}"> padrão</label></div>`;
+  fluxoEl.appendChild(linha);
+}
+function mostrarFluxo(i) {
+  const padrao = $(`fluxo-padrao-${i}`).checked, nivel = $(`fluxo-nivel-${i}`), barra = $(`fluxo-${i}`);
+  barra.disabled = padrao;
+  nivel.classList.toggle('padrao', padrao);
+  nivel.querySelector('span').textContent = padrao ? 'Padrão' : `${nomeDaDificuldade(barra.value).nome} · ${barra.value}`;
+}
+for (let i = 0; i < FLUXO_TAM; i++) {
+  $(`fluxo-${i}`).addEventListener('input', () => mostrarFluxo(i));
+  $(`fluxo-padrao-${i}`).addEventListener('change', () => mostrarFluxo(i));
+}
+const lerFluxo = () => Array.from({ length: FLUXO_TAM }, (_, i) => ($(`fluxo-padrao-${i}`).checked ? null : Number($(`fluxo-${i}`).value)));
+
 function fill(c) {
+  (c.fluxo || []).forEach((v, i) => {
+    if (i >= FLUXO_TAM) return;
+    $(`fluxo-padrao-${i}`).checked = v === null;
+    $(`fluxo-${i}`).value = v ?? 40;
+    mostrarFluxo(i);
+  });
   dificuldade = c.dificuldade ?? null;
   $('dificuldade').value = dificuldade ?? 40;
   mostrarDificuldade();
@@ -273,6 +319,7 @@ function read() {
     pitsMax: $('pitsMax').value,
     analiseAcimaDe: $('analiseAcimaDe').value,
     dificuldade,
+    fluxo: lerFluxo(),
   };
 }
 function say(msg, err = false) { status.textContent = msg; status.classList.toggle('err', err); }
@@ -294,7 +341,13 @@ async function salvar(regras, msg) {
 
 // só o operador vê e salva as regras
 const { usuario } = await arena.sessao().catch(() => ({}));
-if (!usuario?.operador) {
+const local = await arena.adminLocal();
+if (local) {
+  // servidor de testes com --admin-local, aberto em localhost: sem login
+  $('aviso-local').hidden = false;
+  $('form').hidden = false;
+  fill(await arena.regras());
+} else if (!usuario?.operador) {
   $('sem-acesso').hidden = false;
   if (usuario) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador. Saia e entre com a conta de operador.`;
 } else if (!usuario.doisFatoresAtivo) {
@@ -377,7 +430,7 @@ async function mostrarAuditoria() {
       : '<p class="vazio">Nada registrado ainda.</p>';
   } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
 }
-if (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores) {
+if (local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores)) {
   $('analises').hidden = false;
   $('auditoria').hidden = false;
   await mostrarAnalises();

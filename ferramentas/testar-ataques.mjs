@@ -241,6 +241,45 @@ try {
   conferir('regras com campos a mais e valores absurdos', injetadas.dificuldade === 100 && !('operador' in injetadas) && !('saldo' in injetadas) && injetadas.fruitPercent >= 0.01 && injetadas.enemiesPerChunk <= 8,
     `dificuldade ${injetadas.dificuldade}, inimigos ${injetadas.enemiesPerChunk}, fruta ${injetadas.fruitPercent}%`);
   conferir('código de ativação some depois de ativar', !fs.existsSync(arqAtivacao));
+
+  console.log('--- fluxo de partidas');
+  // posição 1 = muito fácil (0), posição 2 = impossível (100), o resto = regras gerais
+  await op('PUT', '/api/admin/regras', { regras: { fluxo: [0, 100] } });
+  const fx = await novaConta('Fluxo'); await fx('POST', '/api/carteira/deposito', { valor: 100000 });
+  const p1 = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
+  conferir('1ª partida usa a dificuldade da posição 1', p1.regras.fluxoPosicao === 1 && p1.regras.enemiesPerChunk === 0 && p1.regras.dificuldade === 0, `posição ${p1.regras.fluxoPosicao}, inimigos ${p1.regras.enemiesPerChunk}`);
+  await fx('POST', `/api/partidas/${p1.id}/cancelar`);
+  const p1b = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
+  conferir('partida cancelada antes do START não avança o fluxo', p1b.regras.fluxoPosicao === 1);
+  await fx('POST', `/api/partidas/${p1b.id}/comecar`);
+  await fx('POST', `/api/partidas/${p1b.id}/encerrar`, { rle: [[8, 30]], frutas: 0 });
+  const p2 = (await fx('POST', '/api/partidas', { entrada: 1000 })).j.partida;
+  conferir('2ª partida usa a dificuldade da posição 2', p2.regras.fluxoPosicao === 2 && p2.regras.enemiesPerChunk === 8 && p2.regras.speedStart === 1.8, `posição ${p2.regras.fluxoPosicao}, inimigos ${p2.regras.enemiesPerChunk}, velocidade ${p2.regras.speedStart}`);
+  await fx('POST', `/api/partidas/${p2.id}/cancelar`);
+  conferir('jogador não muda o próprio fluxo', (await fx('PUT', '/api/admin/regras', { regras: { fluxo: [0, 0, 0] } })).s === 403);
+
+  console.log('--- admin local (só para testes no computador)');
+  conferir('admin local desligado sem a opção', (await cliente()('GET', '/api/admin/local')).j.local === false && (await cliente()('PUT', '/api/admin/regras', { regras: {} })).s === 401);
+  // com a opção, mas configurado como produção (atrás do proxy): o servidor nem sobe
+  const recusa = await new Promise(ok => {
+    const p = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), '8199', '--admin-local'], { env: { ...process.env, ARENA_DB: dbArq + '-local', ARENA_PROXY: '1' }, stdio: 'ignore' });
+    const t = setTimeout(() => { p.kill(); ok('subiu'); }, 8000);
+    p.on('exit', c => { clearTimeout(t); ok(c); });
+  });
+  conferir('--admin-local recusado em configuração de produção', recusa === 1, `saída ${recusa}`);
+  // com a opção num servidor de teste: só localhost sem proxy entra
+  const loc = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), '8199', '--admin-local'], { env: { ...process.env, ARENA_DB: dbArq + '-local', ARENA_BACKUP_HORAS: '0', ARENA_SMTP_URL: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let logLoc = ''; loc.stdout.on('data', d => { logLoc += d; });
+  for (let i = 0; i < 100 && !logLoc.includes('Crash Arena em'); i++) await dormir(100);
+  const pedir = (cab = {}) => new Promise(ok => {
+    const r = http.request({ host: '127.0.0.1', port: 8199, path: '/api/admin/regras', method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Arena': '1', ...cab } }, res => { res.resume(); res.on('end', () => ok(res.statusCode)); });
+    r.end(JSON.stringify({ regras: { fluxo: [50] } }));
+  });
+  conferir('admin local: localhost entra sem login', (await pedir({ Host: 'localhost:8199' })) === 200);
+  conferir('admin local: Host de fora (forjado) não entra', (await pedir({ Host: 'arenacrash.com' })) === 401);
+  conferir('admin local: pedido vindo de proxy não entra', (await pedir({ Host: 'localhost:8199', 'X-Forwarded-For': '8.8.8.8' })) === 401);
+  loc.kill(); await dormir(300);
+  for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbArq + '-local' + s); } catch {} }
   await op('PUT', '/api/admin/regras', { regras: { analiseAcimaDe: 1, fruitPercent: 60 } });
   let pe, ge;
   for (let k = 0; k < 6; k++) {

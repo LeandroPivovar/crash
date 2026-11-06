@@ -15,7 +15,12 @@ export const DEFAULTS = {
   pitsMax: 2,              // buracos (cada trecho da fase real tem 0, 1 ou 2; o chunk junta vários se preciso)
   analiseAcimaDe: 5,       // servidor: pagamento acima de N × a entrada vai para análise do operador antes de creditar
   dificuldade: null,       // posição da barra de dificuldade (0–100) que gerou estas regras; null = ajuste à mão
+  fluxo: Array(10).fill(null), // fluxo de partidas: dificuldade (0–100) da 1ª à 10ª partida de cada jogador; null = regras gerais
 };
+
+// Fluxo de partidas: cada jogador passa por FLUXO_TAM partidas seguidas; a N-ª usa a dificuldade da posição N
+// (depois da última, recomeça da primeira). Partida cancelada antes do START não conta.
+export const FLUXO_TAM = 10;
 
 // Barra de dificuldade: seis níveis de referência (medidos com o robô de teste; a distância média cai a cada nível:
 // ~1 200 m, ~360, ~270, ~180, ~125 e ~45). A barra vai de 0 a 100 e interpola entre eles, então cada ponto é um
@@ -46,6 +51,12 @@ export function regrasDaDificuldade(v) {
   };
   if (r.pitsMax < r.pitsMin) r.pitsMax = r.pitsMin;
   return r;
+}
+// Regras de uma partida na posição `posicao` (0..FLUXO_TAM−1) do fluxo: as gerais, com inimigos, buracos e
+// velocidade trocados pelos da dificuldade daquela posição (se ela tiver uma).
+export function regrasNoFluxo(regras, posicao) {
+  const r = normalize(regras), d = r.fluxo[posicao];
+  return d === null ? r : normalize({ ...r, ...regrasDaDificuldade(d), dificuldade: d });
 }
 // nome do nível para a posição v (a faixa mais próxima)
 export const nomeDaDificuldade = v => DIFICULDADES[Math.round(Math.max(0, Math.min(100, Number(v) || 0)) / 100 * (DIFICULDADES.length - 1))];
@@ -82,6 +93,10 @@ export function normalize(c) {
     pitsMax: clampInt(o.pitsMax, 0, LIMITS.pits, d.pitsMax),
     analiseAcimaDe: clampNum(o.analiseAcimaDe, 1, 1000, d.analiseAcimaDe),
     dificuldade: o.dificuldade === null || o.dificuldade === undefined || o.dificuldade === '' ? null : clampInt(o.dificuldade, 0, 100, null),
+    fluxo: Array.from({ length: FLUXO_TAM }, (_, i) => {
+      const v = Array.isArray(o.fluxo) ? o.fluxo[i] : null;
+      return v === null || v === undefined || v === '' ? null : clampInt(v, 0, 100, null);
+    }),
   };
   if (out.fruitMax < out.fruitMin) out.fruitMax = out.fruitMin;
   if (out.pitsMax < out.pitsMin) out.pitsMax = out.pitsMin;
