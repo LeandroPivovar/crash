@@ -201,13 +201,15 @@ const regrasAtuais = () => {
   return cfg.normalize(r ? JSON.parse(r.valor) : null);
 };
 const valorPorFruta = (entrada, regras) => Math.round(entrada * regras.fruitPercent / 100);
+// quanto as frutas valem na partida (com limiar de ganho, as frutas depois dele valem o do nível novo)
+const valorFrutasDa = p => cfg.valorDasFrutas(p.entrada, cfg.normalize(JSON.parse(p.regras)), p.frutas || 0);
 const partidaPublica = (p, { comSemente = true } = {}) => p && ({
   id: p.id, modo: p.modo, entrada: p.entrada, ...(comSemente ? { semente: p.semente } : {}), regras: JSON.parse(p.regras), estado: p.estado,
   criada: p.criada, comecou: p.comecou, encerrada: p.encerrada,
   frutas: p.frutas, distancia: p.distancia, tempoMs: p.tempo_ms, porFruta: p.por_fruta, recebido: p.recebido,
   resultado: p.recebido == null ? null : p.recebido - p.entrada,
   verificacao: p.verificacao || null, frutasInformadas: p.frutas_informadas ?? null,
-  analise: p.analise || null, aPagar: p.analise === 'pendente' ? (p.frutas || 0) * (p.por_fruta || 0) : null,
+  analise: p.analise || null, aPagar: p.analise === 'pendente' ? valorFrutasDa(p) : null,
 });
 const partidaAberta = uid => db.prepare("SELECT * FROM partidas WHERE usuario_id = ? AND estado IN ('criada','jogando') ORDER BY criada DESC LIMIT 1").get(uid);
 const idValido = id => /^p_[A-Za-z0-9_-]{6,30}$/.test(id);
@@ -320,7 +322,7 @@ function finalizar(id, r, tempoMs) {
   const regras = cfg.normalize(JSON.parse(p.regras));
   const porFruta = valorPorFruta(p.entrada, regras);
   const f = r ? r.frutas : 0;
-  const valor = f * porFruta;
+  const valor = cfg.valorDasFrutas(p.entrada, regras, f);
   const inf = p.frutas_informadas;
   const verificacao = !r ? 'erro' : inf == null ? 'refeita' : inf === f ? 'confirmada' : 'divergente';
   const motivos = [];
@@ -330,7 +332,10 @@ function finalizar(id, r, tempoMs) {
   if (verificacao === 'divergente') motivos.push('o jogo informou outro número de frutas');
   const emAnalise = valor > 0 && motivos.length > 0;
   const recebido = emAnalise ? 0 : valor;
-  if (recebido > 0) lancar(p.usuario_id, 'premio', recebido, `Frutas · ${f} × ${moedas(porFruta)}`, p.id);
+  const l = regras.limiar, passou = l && f > l.frutas;
+  if (recebido > 0) lancar(p.usuario_id, 'premio', recebido, passou
+    ? `Frutas · ${l.frutas} × ${moedas(porFruta)} + ${f - l.frutas} × ${moedas(valorPorFruta(p.entrada, l.depois))} (após o limiar)`
+    : `Frutas · ${f} × ${moedas(porFruta)}`, p.id);
   db.prepare(`UPDATE partidas SET estado = 'encerrada', encerrada = ?, frutas = ?, distancia = ?, tempo_ms = ?, por_fruta = ?,
       recebido = ?, verificacao = ?, analise = ?, motivo_analise = ?, sinais = ? WHERE id = ?`)
     .run(agora(), f, r ? r.distancia : 0, Math.max(0, Math.min(DURACAO_MAX_MS, Math.round(Number(tempoMs) || 0))), porFruta, recebido, verificacao,
@@ -789,7 +794,8 @@ rota('GET', '/api/admin/local', {}, ({ req }) => ({ local: adminLocal(req) }));
 rota('GET', '/api/regras', {}, () => ({ regras: regrasAtuais() }));
 rota('PUT', '/api/admin/regras', { operador: true }, ({ corpo, u, ip }) => {
   const antes = regrasAtuais();
-  const r = cfg.normalize(corpo.regras && typeof corpo.regras === 'object' ? corpo.regras : {});
+  // o limiar resolvido (frutas, regras do nível novo) é calculado na criação de cada partida, nunca vem de fora
+  const r = cfg.normalize(corpo.regras && typeof corpo.regras === 'object' ? { ...corpo.regras, limiar: null } : {});
   db.prepare("INSERT INTO config (chave, valor) VALUES ('regras', ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").run(JSON.stringify(r));
   auditar('regras_alteradas', { u, ip, detalhe: { antes, depois: r } });
   return { regras: r };
@@ -806,7 +812,7 @@ rota('POST', '/api/admin/analises/([\\w-]+)', { operador: true }, ({ m, corpo, u
   if (!p || p.analise !== 'pendente') throw new Erro(409, 'Essa partida não está em análise.');
   const aprovar = corpo.decisao === 'aprovar';
   if (!aprovar && corpo.decisao !== 'recusar') throw new Erro(400, 'Decisão inválida.');
-  const valor = p.frutas * p.por_fruta;
+  const valor = valorFrutasDa(p);
   if (aprovar && valor > 0) lancar(p.usuario_id, 'premio', valor, `Frutas (após análise) · ${p.frutas} × ${moedas(p.por_fruta)}`, p.id);
   db.prepare('UPDATE partidas SET analise = ?, recebido = ? WHERE id = ?').run(aprovar ? 'aprovada' : 'recusada', aprovar ? valor : 0, p.id);
   auditar(aprovar ? 'analise_aprovada' : 'analise_recusada', { u, ip, detalhe: { partida: p.id, valor } });

@@ -920,9 +920,9 @@ const deposited = partida.entrada / 100; // entrada da partida (moedas; R$ 1 = 1
 const brl = v => 'R$ ' + v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 // Saldo (em reais): o Crash começa sem nada; cada fruta devolve fruitPercent % do valor depositado
 // (/configuracoes). Conta em centavos para não acumular erro de arredondamento.
-const fruitCents = () => Math.round(deposited * config.fruitPercent); // = depositado × % / 100, em centavos
+// com limiar de ganho, as frutas depois dele valem o do nível novo (mesma conta do servidor)
 function computeScore() {
-  score = fruit * fruitCents() / 100;
+  score = arena.valorDasFrutas(partida.entrada, config, fruit) / 100;
   if (score > record) { record = score; try { localStorage.setItem(RECORD_KEY, String(record)); } catch {} }
 }
 

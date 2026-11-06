@@ -14,7 +14,10 @@ function mostrar(r) {
   const $ = id => document.getElementById(id);
   $('quando').textContent = `Partida de ${quando(r.encerrada)}`;
   $('r-entrada').textContent = arena.moedas(r.entrada);
-  $('r-frutas').textContent = `${r.frutas} × ✦ ${arena.moedas(r.porFruta)}`;
+  const l = r.regras?.limiar;
+  $('r-frutas').textContent = l && r.frutas > l.frutas
+    ? `${l.frutas} × ✦ ${arena.moedas(r.porFruta)} + ${r.frutas - l.frutas} × ✦ ${arena.moedas(arena.valorPorFruta(r.entrada, l.depois))}`
+    : `${r.frutas} × ✦ ${arena.moedas(r.porFruta)}`;
   $('r-recebido').textContent = arena.moedas(r.recebido);
   $('r-distancia').textContent = `${Math.floor(r.distancia / 100).toLocaleString('pt-BR')} m`;
   $('r-saldo-final').className = 'saldo-final ' + (r.resultado > 0 ? 'gain' : r.resultado < 0 ? 'loss' : 'even');

@@ -294,6 +294,29 @@ try {
   await fx('POST', `/api/partidas/${p2.id}/cancelar`);
   conferir('jogador não muda o próprio fluxo', (await fx('PUT', '/api/admin/regras', { regras: { fluxo: [0, 0, 0] } })).s === 403);
 
+  console.log('--- limiar de ganho (a dificuldade sobe no meio da partida)');
+  // em todas as posições: ao ganhar 0,1× a entrada (2 frutas a 5%), sobe para "Impossível"
+  const comLimiar = (await op('PUT', '/api/admin/regras', { regras: { fluxoLimiar: Array(10).fill(0.1), fluxoDepois: Array(10).fill(100), limiar: { ganho: 0.1, frutas: 1, dificuldade: 0, depois: { fruitPercent: 1000 } } } })).j.regras;
+  conferir('limiar resolvido não pode vir do operador', comLimiar.limiar === null && comLimiar.fluxoLimiar[0] === 0.1);
+  const lm = await novaConta('Limiar'); await lm('POST', '/api/carteira/deposito', { valor: 100000 });
+  let pl, gl;
+  process.env.ARENA_LIMIAR = '0.1'; // o robô joga com as mesmas regras da partida
+  for (let k = 0; k < 6; k++) {
+    pl = (await lm('POST', '/api/partidas', { entrada: 2000 })).j.partida;
+    gl = jogarComRobo(pl.semente, 40);
+    if (gl.frutas > 2) break;
+    await lm('POST', `/api/partidas/${pl.id}/cancelar`);
+  }
+  delete process.env.ARENA_LIMIAR;
+  conferir('partida guarda o limiar (2 frutas → Impossível)', pl.regras.limiar?.frutas === 2 && pl.regras.limiar.dificuldade === 100 && pl.regras.limiar.depois.fruitPercent === 1.25);
+  await lm('POST', `/api/partidas/${pl.id}/comecar`);
+  await dormir(Math.max(0, passosDe(gl.rle) / 60 * 1000 - 2500));
+  const fimL = (await lm('POST', `/api/partidas/${pl.id}/encerrar`, { rle: gl.rle, frutas: gl.frutas })).j.partida;
+  const esperado = 2 * 100 + (fimL.frutas - 2) * 25; // 2 frutas a 5% de 2000 + o resto a 1,25%
+  conferir('pagamento: frutas depois do limiar valem o do nível novo', fimL.verificacao === 'confirmada' && fimL.frutas > 2 && fimL.recebido === esperado,
+    `${fimL.frutas} frutas, recebeu ${fimL.recebido}, esperado ${esperado}, ${fimL.verificacao}`);
+  await op('PUT', '/api/admin/regras', { regras: {} });
+
   console.log('--- admin local (só para testes no computador)');
   conferir('admin local desligado sem a opção', (await cliente()('GET', '/api/admin/local')).j.local === false && (await cliente()('PUT', '/api/admin/regras', { regras: {} })).s === 401);
   // com a opção, mas configurado como produção (atrás do proxy): o servidor nem sobe

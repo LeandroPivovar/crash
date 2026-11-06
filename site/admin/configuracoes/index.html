@@ -64,6 +64,12 @@
   .fluxo-nivel span { color: var(--accent); font-weight: 700; }
   .fluxo-nivel.padrao span { color: var(--muted); }
   .fluxo-nivel label { color: var(--muted); font-weight: 400; display: flex; gap: 4px; align-items: center; }
+  .fluxo-limiar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; color: var(--muted); padding: 2px 0 4px 84px; }
+  .fluxo-limiar input.ganho { width: 58px; background: #0d1224; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; text-align: center; }
+  .fluxo-limiar input[type=range] { flex: 1 1 120px; accent-color: #ff4d4d; }
+  .fluxo-limiar b { color: #ff8080; min-width: 120px; }
+  .fluxo-limiar.off > :not(label) { opacity: .35; }
+  @media (max-width: 520px) { .fluxo-limiar { padding-left: 0; } }
   .aviso-local { background: #3b2a06; border: 1px solid #ff9a3c; color: #ffd9a8; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 14px; }
   nav.admin { display: flex; gap: 6px; margin-bottom: 16px; }
   nav.admin a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); font-weight: 600; }
@@ -127,7 +133,7 @@
 
     <section>
       <h2>Fluxo de partidas</h2>
-      <p class="hint" style="margin-bottom:10px">Cada jogador passa por <b>10 partidas</b> seguidas: a 1ª usa a dificuldade da posição 1, a 2ª a da posição 2… Depois da 10ª, recomeça da 1. Vale para todos os jogadores. Partida cancelada antes do START não conta. <b>Padrão</b> = usa a dificuldade geral acima.</p>
+      <p class="hint" style="margin-bottom:10px">Cada jogador passa por <b>10 partidas</b> seguidas: a 1ª usa a dificuldade da posição 1, a 2ª a da posição 2… Depois da 10ª, recomeça da 1. Vale para todos os jogadores. Partida cancelada antes do START não conta. <b>Padrão</b> = usa a dificuldade geral acima. <b>Limiar de ganho</b>: quando o jogador já ganhou esse tanto × a entrada (ex.: 1,5 = 150%), a partida sobe na hora para a dificuldade escolhida — mais aceleração, e as frutas seguintes valem o do nível novo.</p>
       <div id="fluxo"></div>
     </section>
 
@@ -269,8 +275,20 @@ for (let i = 0; i < FLUXO_TAM; i++) {
   linha.className = 'fluxo-linha';
   linha.innerHTML = `<b>Partida ${i + 1}</b>
     <input type="range" min="0" max="100" step="1" value="40" id="fluxo-${i}" aria-label="Dificuldade da partida ${i + 1}">
-    <div class="fluxo-nivel" id="fluxo-nivel-${i}"><span></span><label><input type="checkbox" id="fluxo-padrao-${i}"> padrão</label></div>`;
+    <div class="fluxo-nivel" id="fluxo-nivel-${i}"><span></span><label><input type="checkbox" id="fluxo-padrao-${i}"> padrão</label></div>
+    <div class="fluxo-limiar off" id="limiar-${i}">
+      <label><input type="checkbox" id="limiar-on-${i}"> Limiar de ganho:</label> ao ganhar
+      <input class="ganho" id="limiar-ganho-${i}" inputmode="decimal" value="1,5" aria-label="Limiar de ganho da partida ${i + 1} (vezes a entrada)">× a entrada, sobe para
+      <input type="range" min="0" max="100" step="1" value="80" id="limiar-dif-${i}" aria-label="Dificuldade depois do limiar na partida ${i + 1}">
+      <b id="limiar-nome-${i}"></b>
+    </div>`;
   fluxoEl.appendChild(linha);
+}
+function mostrarLimiar(i) {
+  const on = $(`limiar-on-${i}`).checked, dif = $(`limiar-dif-${i}`).value;
+  $(`limiar-${i}`).classList.toggle('off', !on);
+  $(`limiar-ganho-${i}`).disabled = $(`limiar-dif-${i}`).disabled = !on;
+  $(`limiar-nome-${i}`).textContent = `${nomeDaDificuldade(dif).nome} · ${dif}`;
 }
 function mostrarFluxo(i) {
   const padrao = $(`fluxo-padrao-${i}`).checked, nivel = $(`fluxo-nivel-${i}`), barra = $(`fluxo-${i}`);
@@ -281,7 +299,13 @@ function mostrarFluxo(i) {
 for (let i = 0; i < FLUXO_TAM; i++) {
   $(`fluxo-${i}`).addEventListener('input', () => mostrarFluxo(i));
   $(`fluxo-padrao-${i}`).addEventListener('change', () => mostrarFluxo(i));
+  $(`limiar-on-${i}`).addEventListener('change', () => mostrarLimiar(i));
+  $(`limiar-dif-${i}`).addEventListener('input', () => mostrarLimiar(i));
+  mostrarLimiar(i);
 }
+const ganhoDe = i => Number(String($(`limiar-ganho-${i}`).value).replace(',', '.'));
+const lerLimiar = () => Array.from({ length: FLUXO_TAM }, (_, i) => ($(`limiar-on-${i}`).checked ? ganhoDe(i) : null));
+const lerDepois = () => Array.from({ length: FLUXO_TAM }, (_, i) => ($(`limiar-on-${i}`).checked ? Number($(`limiar-dif-${i}`).value) : null));
 const lerFluxo = () => Array.from({ length: FLUXO_TAM }, (_, i) => ($(`fluxo-padrao-${i}`).checked ? null : Number($(`fluxo-${i}`).value)));
 
 function fill(c) {
@@ -290,6 +314,11 @@ function fill(c) {
     $(`fluxo-padrao-${i}`).checked = v === null;
     $(`fluxo-${i}`).value = v ?? 40;
     mostrarFluxo(i);
+    const g = c.fluxoLimiar?.[i] ?? null, d = c.fluxoDepois?.[i] ?? null;
+    $(`limiar-on-${i}`).checked = g !== null && d !== null;
+    if (g !== null) $(`limiar-ganho-${i}`).value = String(g).replace('.', ',');
+    if (d !== null) $(`limiar-dif-${i}`).value = d;
+    mostrarLimiar(i);
   });
   dificuldade = c.dificuldade ?? null;
   $('dificuldade').value = dificuldade ?? 40;
@@ -325,6 +354,8 @@ function read() {
     analiseAcimaDe: $('analiseAcimaDe').value,
     dificuldade,
     fluxo: lerFluxo(),
+    fluxoLimiar: lerLimiar(),
+    fluxoDepois: lerDepois(),
   };
 }
 function say(msg, err = false) { status.textContent = msg; status.classList.toggle('err', err); }
@@ -336,6 +367,8 @@ $('form').addEventListener('submit', e => {
   if (+raw.fruitMax < +raw.fruitMin) { say('O tamanho máximo precisa ser maior ou igual ao mínimo.', true); return; }
   if (+raw.speedMax < +raw.speedStart) { say('A velocidade máxima precisa ser maior ou igual à inicial.', true); return; }
   if (+raw.pitsMax < +raw.pitsMin) { say('O máximo de buracos precisa ser maior ou igual ao mínimo.', true); return; }
+  const ruim = raw.fluxoLimiar.findIndex(g => g !== null && !(g >= 0.1 && g <= 100));
+  if (ruim >= 0) { say(`Partida ${ruim + 1}: o limiar de ganho precisa ser um número entre 0,1 e 100 (ex.: 1,5).`, true); return; }
   salvar(raw, 'Salvo. Vale para as próximas partidas.');
 });
 $('reset').addEventListener('click', () => salvar(DEFAULTS, 'Valores padrão restaurados.'));

@@ -67,6 +67,7 @@ export const sacar = (valor, codigo) => api('POST', '/carteira/saque', { valor, 
 export const regras = async () => normalize((await api('GET', '/regras')).regras);
 export const regrasDaPartida = p => normalize(p.regras);
 export const valorPorFruta = (entrada, r) => Math.round(entrada * r.fruitPercent / 100);
+export { valorDasFrutas } from './jogo/config.js';
 
 // ---------- partida ----------
 // estado: criada (entrada paga, tela START) → jogando → encerrada | cancelada

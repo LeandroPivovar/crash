@@ -13,7 +13,7 @@ import { Enemy } from './enemies.js';
 import { LevelChain } from './levelchain.js';
 
 export const SIM_DT = 1 / 60;
-export const SIM_VERSAO = 6; // muda quando a simulação muda (6: pulo com margem e antecipado; 5: mapa plano; 4: sem giro; 3: desvio livre; 2: faixas)
+export const SIM_VERSAO = 7; // muda quando a simulação muda (7: limiar de ganho sobe a dificuldade; 6: pulo com margem e antecipado; 5: mapa plano; 4: sem giro; 3: desvio livre; 2: faixas)
 
 // Fim da trilha real usada nos trechos (chão plano antes do primeiro degrau da escada, que começa em z 101 200)
 export const LEVEL_END_Z = 101300;
@@ -293,6 +293,7 @@ export function prepararNivel(json, bin, plano = null) {
 //   fruta(f) → objeto visual da fruta;  removerFruta(f);  coletou(f)
 //   morreu();  matou()
 export function criarMundo(nivel, { config, semente, visual = {} }) {
+  config = { ...config }; // cópia: o limiar de ganho muda as regras no meio da corrida
   const { json, crash, templates, guideLocal, alturaChao } = nivel;
   const collision = nivel.collisionPlana; // mapa plano: a simulação inteira vive no espaço achatado
   const plano = (y, x, z) => y - alturaChao(x, z);
@@ -310,7 +311,7 @@ export function criarMundo(nivel, { config, semente, visual = {} }) {
   });
   const cena = visual.cena || { add() {}, remove() {} };
 
-  const estado = { frutas: 0, distancia: 0, passos: 0, fim: null };
+  const estado = { frutas: 0, distancia: 0, passos: 0, fim: null, subiu: false };
   const enemies = [];
   const pickups = [];
   const boxes = []; // sem caixas no modo infinito
@@ -341,7 +342,20 @@ export function criarMundo(nivel, { config, semente, visual = {} }) {
   const keepReal = new Set(enemies.filter(e => e.pts[0].z > LOOP_END_Z).slice(0, config.enemiesStart));
   for (const e of enemies) if (!keepReal.has(e)) e.die();
 
-  const speedMul = () => Math.min(config.speedMax, config.speedStart + config.speedGain * estado.distancia / 10000);
+  // velocidade: parte de v0 na distância d0 e cresce speedGain a cada 100 m, até speedMax. O limiar de ganho troca
+  // a aceleração e o máximo sem dar tranco (continua da velocidade em que estava).
+  let v0 = config.speedStart, d0 = 0;
+  const speedMul = () => Math.min(config.speedMax, v0 + config.speedGain * (estado.distancia - d0) / 10000);
+  // Limiar de ganho: ao pegar a fruta que leva o ganho a `limiar.ganho` × a entrada, a dificuldade sobe para o
+  // nível escolhido (aceleração, máximo, inimigos e buracos dos próximos trechos, e o valor das próximas frutas).
+  function subirDificuldade() {
+    const l = config.limiar;
+    v0 = speedMul(); d0 = estado.distancia;
+    Object.assign(config, l.depois);
+    config.speedMax = Math.max(config.speedMax, v0);
+    estado.subiu = true;
+    visual.subiu?.(l);
+  }
   const endReal = nivel.trailAt(LOOP_END_Z);
   const track = new LevelChain({
     scene: cena, scale: SCALE, collision, templates,
@@ -424,6 +438,7 @@ export function criarMundo(nivel, { config, semente, visual = {} }) {
       if (Math.hypot(f.x - p.x, f.z - p.z) < FRUIT_REACH && dy > -150 && dy < FRUIT_REACH_UP) {
         f.alive = false;
         estado.frutas++;
+        if (config.limiar && !estado.subiu && estado.frutas >= config.limiar.frutas) subirDificuldade();
         visual.coletou?.(f);
       }
     }

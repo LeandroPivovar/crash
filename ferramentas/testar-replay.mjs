@@ -15,7 +15,8 @@ const C = await import(pathToFileURL(raiz + '/site/js/jogo/config.js').href);
 const json = JSON.parse(fs.readFileSync(raiz + '/site/data/level.json', 'utf8'));
 const b = fs.readFileSync(raiz + '/site/data/level.bin');
 const nivel = M.prepararNivel(json, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
-const config = C.normalize(null);
+// ARENA_LIMIAR=0.2 testa o limiar de ganho (a dificuldade sobe para "Impossível" no meio da corrida)
+const config = process.env.ARENA_LIMIAR ? C.regrasNoFluxo({ fluxoLimiar: [Number(process.env.ARENA_LIMIAR)], fluxoDepois: [100] }, 0) : C.normalize(null);
 const m = M.criarMundo(nivel, { config, semente });
 const g = new M.Gravador();
 let hold = 0, zAnt = 0, xAtual = 0;
@@ -43,5 +44,5 @@ for (let i = 0; i < 60 * segundos && !m.estado.fim; i++) {
 }
 const sim = { passos: m.estado.passos, frutas: m.estado.fim ? m.estado.fim.frutas : m.estado.frutas, distancia: Math.round(m.estado.fim ? m.estado.fim.distancia : m.estado.distancia), morreu: !!m.estado.fim };
 const rep = M.refazerCorrida(nivel, { config, semente, rle: g.rle });
-console.log(JSON.stringify({ semente, sim, replay: rep, igual: sim.frutas === rep.frutas && sim.passos === rep.passos && sim.distancia === rep.distancia, rlePares: g.rle.length }));
+console.log(JSON.stringify({ semente, sim, replay: rep, ...(config.limiar ? { limiar: { frutas: config.limiar.frutas, subiu: m.estado.subiu, velocidadeFinal: +m.speedMul().toFixed(3) } } : {}), igual: sim.frutas === rep.frutas && sim.passos === rep.passos && sim.distancia === rep.distancia, rlePares: g.rle.length }));
 if (process.argv[5]) fs.writeFileSync(process.argv[5], JSON.stringify({ semente, rle: g.rle, ...sim }));

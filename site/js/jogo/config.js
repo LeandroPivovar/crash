@@ -16,6 +16,11 @@ export const DEFAULTS = {
   analiseAcimaDe: 5,       // servidor: pagamento acima de N × a entrada vai para análise do operador antes de creditar
   dificuldade: null,       // posição da barra de dificuldade (0–100) que gerou estas regras; null = ajuste à mão
   fluxo: Array(10).fill(null), // fluxo de partidas: dificuldade (0–100) da 1ª à 10ª partida de cada jogador; null = regras gerais
+  // Limiar de ganho por posição do fluxo: quando o jogador já ganhou fluxoLimiar[i] × a entrada (ex.: 1,5), a
+  // dificuldade da partida sobe para fluxoDepois[i] (0–100) dali em diante. null = sem limiar.
+  fluxoLimiar: Array(10).fill(null),
+  fluxoDepois: Array(10).fill(null),
+  limiar: null, // na partida: { ganho, dificuldade, frutas, depois: {regras do nível novo} } (calculado ao criar)
 };
 
 // Fluxo de partidas: cada jogador passa por FLUXO_TAM partidas seguidas; a N-ª usa a dificuldade da posição N
@@ -62,7 +67,30 @@ export function regrasDaDificuldade(v) {
 // inimigos e buracos trocados pelos da dificuldade daquela posição (se ela tiver uma).
 export function regrasNoFluxo(regras, posicao) {
   const r = normalize(regras), d = r.fluxo[posicao];
-  return d === null ? r : normalize({ ...r, ...regrasDaDificuldade(d), dificuldade: d });
+  const base = d === null ? r : normalize({ ...r, ...regrasDaDificuldade(d), dificuldade: d });
+  const ganho = r.fluxoLimiar[posicao], depois = r.fluxoDepois[posicao];
+  base.limiar = ganho === null || depois === null ? null
+    : normalizarLimiar({ ganho, dificuldade: depois, frutas: frutasDoLimiar(ganho, base.fruitPercent), depois: regrasDaDificuldade(depois) });
+  return base;
+}
+// Quantas frutas fazem o jogador chegar a `ganho` × a entrada (cada fruta vale fruitPercent % da entrada).
+export const frutasDoLimiar = (ganho, fruitPercent) => Math.max(1, Math.ceil(ganho * 100 / fruitPercent - 1e-9));
+// Valor (centavos) de `frutas` frutas numa partida: até o limiar, no valor inicial; depois, no valor do nível novo.
+export function valorDasFrutas(entrada, regras, frutas) {
+  const antes = Math.round(entrada * regras.fruitPercent / 100);
+  const l = regras.limiar;
+  if (!l || frutas <= l.frutas) return frutas * antes;
+  return l.frutas * antes + (frutas - l.frutas) * Math.round(entrada * l.depois.fruitPercent / 100);
+}
+const CAMPOS_LIMIAR = ['fruitPercent', 'speedGain', 'speedMax', 'enemiesPerChunk', 'pitsMin', 'pitsMax'];
+function normalizarLimiar(l) {
+  if (!l || typeof l !== 'object' || !l.depois || typeof l.depois !== 'object') return null;
+  const ganho = clampNum(l.ganho, 0.1, 100, null), frutas = clampInt(l.frutas, 1, 100000, null), dificuldade = clampInt(l.dificuldade, 0, 100, null);
+  if (ganho === null || frutas === null || dificuldade === null) return null;
+  const n = normalize({ ...l.depois, fluxo: [] });
+  const depois = {};
+  for (const k of CAMPOS_LIMIAR) depois[k] = n[k];
+  return { ganho, dificuldade, frutas, depois };
 }
 // nome do nível para a posição v (a faixa mais próxima)
 export const nomeDaDificuldade = v => DIFICULDADES[Math.round(Math.max(0, Math.min(100, Number(v) || 0)) / 100 * (DIFICULDADES.length - 1))];
@@ -103,6 +131,15 @@ export function normalize(c) {
       const v = Array.isArray(o.fluxo) ? o.fluxo[i] : null;
       return v === null || v === undefined || v === '' ? null : clampInt(v, 0, 100, null);
     }),
+    fluxoLimiar: Array.from({ length: FLUXO_TAM }, (_, i) => {
+      const v = Array.isArray(o.fluxoLimiar) ? o.fluxoLimiar[i] : null;
+      return v === null || v === undefined || v === '' ? null : clampNum(v, 0.1, 100, null);
+    }),
+    fluxoDepois: Array.from({ length: FLUXO_TAM }, (_, i) => {
+      const v = Array.isArray(o.fluxoDepois) ? o.fluxoDepois[i] : null;
+      return v === null || v === undefined || v === '' ? null : clampInt(v, 0, 100, null);
+    }),
+    limiar: c && c.limiar ? normalizarLimiar(c.limiar) : null,
   };
   if (out.fruitMax < out.fruitMin) out.fruitMax = out.fruitMin;
   if (out.pitsMax < out.pitsMin) out.pitsMax = out.pitsMin;
