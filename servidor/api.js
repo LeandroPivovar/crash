@@ -812,6 +812,148 @@ rota('POST', '/api/admin/analises/([\\w-]+)', { operador: true }, ({ m, corpo, u
   auditar(aprovar ? 'analise_aprovada' : 'analise_recusada', { u, ip, detalhe: { partida: p.id, valor } });
   return { ok: true };
 }));
+// ---------- usuários (operador: suporte) ----------
+// Somas por jogador vindas do livro-razão. "resultado" = o que o jogador ganhou ou perdeu jogando
+// (entradas + frutas + estornos); o lucro da casa com ele é o contrário.
+const SOMAS_USUARIO = `
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id), 0) AS saldo,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%'), 0) AS depositado,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%'), 0) AS bonus,
+  COALESCE((SELECT -SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'saque'), 0) AS sacado,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo IN ('entrada','premio','estorno')), 0) AS resultado,
+  (SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado <> 'cancelada') AS partidas,
+  (SELECT MAX(criada) FROM partidas p WHERE p.usuario_id = u.id) AS ultima_partida`;
+const ORDENS_USUARIO = {
+  recentes: 'u.id DESC', antigos: 'u.id ASC', saldo: 'saldo DESC, u.id DESC', resultado: 'resultado DESC, u.id DESC',
+  prejuizo: 'resultado ASC, u.id DESC', partidas: 'partidas DESC, u.id DESC', ativos: 'ultima_partida DESC, u.id DESC',
+};
+const consulta = req => new URL(req.url, 'http://x').searchParams;
+const cicloDe = (feitas, regras) => {
+  const pos = feitas % cfg.FLUXO_TAM, dif = regras.fluxo[pos];
+  return {
+    tamanho: cfg.FLUXO_TAM, partidasContadas: feitas, volta: Math.floor(feitas / cfg.FLUXO_TAM) + 1,
+    proxima: pos + 1, dificuldade: dif, nivel: dif === null ? 'Padrão (regras gerais)' : `${cfg.nomeDaDificuldade(dif).nome} · ${dif}`,
+  };
+};
+const usuarioResumo = r => ({
+  id: r.id, nome: r.nome, email: r.email || '', visitante: !!r.visitante, operador: !!r.operador, criado: r.criado,
+  doisFatores: !!r.totp_ativo, bonusUsado: !!r.bonus_deposito,
+  saldo: r.saldo, depositado: r.depositado, bonus: r.bonus, sacado: r.sacado, resultado: r.resultado, lucroCasa: -r.resultado,
+  partidas: r.partidas, ultimaPartida: r.ultima_partida, cicloProxima: (r.partidas % cfg.FLUXO_TAM) + 1,
+});
+rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
+  const q = consulta(req);
+  const busca = String(q.get('q') || '').trim().slice(0, 120);
+  const por = Math.min(100, Math.max(5, Number(q.get('por')) || 20));
+  const pagina = Math.max(1, Math.floor(Number(q.get('pagina')) || 1));
+  const ordem = ORDENS_USUARIO[q.get('ordem')] || ORDENS_USUARIO.recentes;
+  const like = `%${busca.replace(/[\\%_]/g, c => '\\' + c)}%`;
+  const idBusca = /^#?\d+$/.test(busca) ? Number(busca.replace('#', '')) : -1;
+  const onde = "(? = '' OR u.nome LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR u.id = ?)";
+  const args = [busca, like, like, idBusca];
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM usuarios u WHERE ${onde}`).get(...args).n;
+  const linhas = db.prepare(`SELECT u.*, ${SOMAS_USUARIO} FROM usuarios u WHERE ${onde} ORDER BY ${ordem} LIMIT ? OFFSET ?`).all(...args, por, (pagina - 1) * por);
+  const geral = db.prepare(`SELECT COUNT(*) AS contas,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE tipo IN ('entrada','premio','estorno')), 0) AS resultado,
+      COALESCE((SELECT SUM(valor) FROM movimentos), 0) AS saldos FROM usuarios`).get();
+  return {
+    total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)),
+    usuarios: linhas.map(usuarioResumo),
+    geral: { contas: geral.contas, lucroCasa: -geral.resultado, saldos: geral.saldos },
+  };
+});
+const alvoUsuario = id => {
+  const u = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(Number(id));
+  if (!u) throw new Erro(404, 'Usuário não encontrado.');
+  return u;
+};
+function detalheUsuario(id) {
+  alvoUsuario(id);
+  const r = db.prepare(`SELECT u.*, ${SOMAS_USUARIO} FROM usuarios u WHERE u.id = ?`).get(Number(id));
+  const partidas = db.prepare('SELECT * FROM partidas WHERE usuario_id = ? ORDER BY criada DESC LIMIT 5000').all(r.id).map(p => {
+    const pp = partidaPublica(p, { comSemente: false });
+    const { fluxoPosicao = null, dificuldade = null, fruitPercent = null } = pp.regras || {};
+    delete pp.regras;
+    return { ...pp, fluxoPosicao, dificuldade, fruitPercent, motivoAnalise: p.motivo_analise || null };
+  });
+  const fechadas = partidas.filter(p => p.estado === 'encerrada');
+  const comResultado = fechadas.filter(p => p.resultado !== null);
+  const est = {
+    encerradas: fechadas.length, canceladas: partidas.filter(p => p.estado === 'cancelada').length,
+    abertas: partidas.filter(p => p.estado === 'criada' || p.estado === 'jogando').length,
+    ganhou: comResultado.filter(p => p.resultado > 0).length, empatou: comResultado.filter(p => p.resultado === 0).length,
+    perdeu: comResultado.filter(p => p.resultado < 0).length, emAnalise: partidas.filter(p => p.analise === 'pendente').length,
+    apostado: fechadas.reduce((s, p) => s + p.entrada, 0), recebido: comResultado.reduce((s, p) => s + p.recebido, 0),
+    frutas: fechadas.reduce((s, p) => s + (p.frutas || 0), 0),
+    melhor: comResultado.length ? Math.max(...comResultado.map(p => p.resultado)) : 0,
+    pior: comResultado.length ? Math.min(...comResultado.map(p => p.resultado)) : 0,
+    maiorDistancia: fechadas.reduce((mx, p) => Math.max(mx, p.distancia || 0), 0),
+  };
+  return {
+    usuario: {
+      ...usuarioResumo(r), nascimento: r.nascimento || '', emailConfirmado: !!r.email_confirmado,
+      sessoesAtivas: db.prepare('SELECT COUNT(*) AS n FROM sessoes WHERE usuario_id = ? AND expira > ?').get(r.id, agora()).n,
+      codigosReserva: JSON.parse(r.codigos_reserva || '[]').length,
+    },
+    estatisticas: est,
+    ciclo: cicloDe(r.partidas, regrasAtuais()),
+    partidas,
+    movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 2000').all(r.id),
+    eventos: db.prepare('SELECT quando, ip, evento, detalhe FROM auditoria WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(r.id),
+  };
+}
+rota('GET', '/api/admin/usuarios/(\\d{1,12})', { operador: true }, ({ m }) => detalheUsuario(m[1]));
+// Suporte: o operador corrige os dados de um jogador. Contas de operador não mudam por aqui (elas são
+// configuradas no servidor), e o operador nunca vê a senha: só define uma nova.
+rota('PATCH', '/api/admin/usuarios/(\\d{1,12})', { operador: true }, ({ m, corpo, u, ip }) => {
+  limitar(`admin-usuario:${u.id}`, 60, 60e3);
+  const alvo = alvoUsuario(m[1]);
+  if (alvo.operador) throw new Erro(403, 'Contas de operador não são alteradas por aqui.');
+  const mudou = [];
+  transacao(() => {
+    if (corpo.nome !== undefined) {
+      const nome = texto(corpo.nome, 30);
+      if (!nome) throw new Erro(400, 'O nome não pode ficar vazio.');
+      if (nome !== alvo.nome) { db.prepare('UPDATE usuarios SET nome = ? WHERE id = ?').run(nome, alvo.id); mudou.push('nome'); }
+    }
+    if (corpo.email !== undefined && !alvo.visitante) {
+      const email = texto(corpo.email, 120).toLowerCase();
+      if (!emailValido(email)) throw new Erro(400, 'Informe um e-mail válido.');
+      if (email !== alvo.email) {
+        if (db.prepare('SELECT 1 FROM usuarios WHERE email = ? AND id <> ?').get(email, alvo.id)) throw new Erro(409, 'Esse e-mail já está em uso.');
+        db.prepare('UPDATE usuarios SET email = ? WHERE id = ?').run(email, alvo.id); mudou.push('email');
+      }
+    }
+    if (corpo.nascimento && !alvo.visitante && corpo.nascimento !== alvo.nascimento) {
+      const a = idade(corpo.nascimento);
+      if (!(a >= 0 && a < 130)) throw new Erro(400, 'Data de nascimento inválida.');
+      db.prepare('UPDATE usuarios SET nascimento = ? WHERE id = ?').run(corpo.nascimento, alvo.id); mudou.push('nascimento');
+    }
+    if (typeof corpo.emailConfirmado === 'boolean' && !alvo.visitante && corpo.emailConfirmado !== !!alvo.email_confirmado) {
+      db.prepare('UPDATE usuarios SET email_confirmado = ? WHERE id = ?').run(corpo.emailConfirmado ? 1 : 0, alvo.id); mudou.push('email_confirmado');
+    }
+    if (corpo.novaSenha) {
+      if (alvo.visitante) throw new Erro(400, 'Visitante não tem senha.');
+      const ruim = senhaForte(String(corpo.novaSenha));
+      if (ruim) throw new Erro(400, ruim);
+      db.prepare('UPDATE usuarios SET senha_hash = ? WHERE id = ?').run(hashSenha(String(corpo.novaSenha)), alvo.id);
+      db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(alvo.id); // quem estava logado entra com a senha nova
+      mudou.push('senha');
+    }
+    if (corpo.desativar2fa === true && alvo.totp_ativo) {
+      db.prepare("UPDATE usuarios SET totp_ativo = 0, totp_segredo = NULL, codigos_reserva = '[]' WHERE id = ?").run(alvo.id);
+      mudou.push('2fa_desativado');
+    }
+    if (corpo.encerrarSessoes === true) {
+      db.prepare('DELETE FROM sessoes WHERE usuario_id = ?').run(alvo.id); mudou.push('sessoes_encerradas');
+    }
+  });
+  if (mudou.length) {
+    auditar('usuario_alterado_pelo_operador', { u, ip, detalhe: { usuario: alvo.id, campos: mudou } });
+    auditar('conta_alterada_pelo_suporte', { u: alvo.id, ip, detalhe: { campos: mudou, operador: u.id } });
+  }
+  return { mudou, ...detalheUsuario(alvo.id) };
+});
 rota('GET', '/api/admin/auditoria', { operador: true }, () => ({
   eventos: db.prepare('SELECT a.*, us.nome AS nome FROM auditoria a LEFT JOIN usuarios us ON us.id = a.usuario_id ORDER BY a.id DESC LIMIT 300').all(),
 }));

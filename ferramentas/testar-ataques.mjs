@@ -254,6 +254,30 @@ try {
   const ganhos = varios.filter(r => r.j?.bonus === 1000).length;
   conferir('8 depósitos de R$ 5 ao mesmo tempo: só 1 bônus', ganhos === 1 && (await bc('GET', '/api/carteira')).j.saldo === 8 * 500 + 1000, `${ganhos} bônus`);
 
+  console.log('--- usuários no admin (suporte)');
+  conferir('jogador comum listando usuários', (await bo('GET', '/api/admin/usuarios')).s === 403);
+  conferir('jogador comum alterando outro jogador', (await bo('PATCH', '/api/admin/usuarios/1', { novaSenha: 'tomei-sua-conta-1' })).s === 403);
+  conferir('sem login listando usuários', (await cliente()('GET', '/api/admin/usuarios')).s === 401);
+  const euBo = (await bo('GET', '/api/eu')).j.usuario;
+  const achou = (await op('GET', `/api/admin/usuarios?q=${encodeURIComponent(euBo.email)}`)).j;
+  conferir('operador busca por e-mail', achou.total === 1 && achou.usuarios[0].id === euBo.id && achou.usuarios[0].saldo === 4000 && achou.usuarios[0].bonus === 1000);
+  const curinga = (await op('GET', `/api/admin/usuarios?q=${encodeURIComponent("%' OR 1=1 --")}`)).j;
+  conferir('busca com curinga/SQL não lista todo mundo', curinga.total === 0, `${curinga.total} achados`);
+  const pag = (await op('GET', '/api/admin/usuarios?por=5&pagina=2&ordem=x;DROP')).j;
+  conferir('paginação e ordem inválida', pag.usuarios.length <= 5 && pag.pagina === 2 && pag.total > 5);
+  const detBo = (await op('GET', `/api/admin/usuarios/${euBo.id}`)).j;
+  conferir('detalhe traz ciclo, resumo e histórico', detBo.ciclo?.proxima === 1 && detBo.usuario.depositado === 3000 && detBo.movimentos.length === 4 && Array.isArray(detBo.partidas)
+    && !JSON.stringify(detBo).includes('senha_hash') && !JSON.stringify(detBo).includes('totp_segredo'));
+  const idOp = (await op('GET', '/api/eu')).j.usuario.id;
+  conferir('operador não altera conta de operador por aqui', (await op('PATCH', `/api/admin/usuarios/${idOp}`, { novaSenha: 'outra-senha-123' })).s === 403);
+  const novoEmail = `suporte${Date.now()}@x.com`;
+  const alt = await op('PATCH', `/api/admin/usuarios/${euBo.id}`, { email: novoEmail, novaSenha: 'nova-senha-suporte-1' });
+  conferir('suporte troca e-mail e senha', alt.s === 200 && alt.j.mudou.includes('email') && alt.j.mudou.includes('senha'));
+  conferir('senha nova derruba a sessão do jogador', (await bo('GET', '/api/carteira')).s === 401);
+  conferir('jogador entra com a senha nova', (await cliente()('POST', '/api/login', { email: novoEmail, senha: 'nova-senha-suporte-1' })).s === 200);
+  conferir('suporte não aceita senha fraca nem e-mail repetido', (await op('PATCH', `/api/admin/usuarios/${euBo.id}`, { novaSenha: '123' })).s === 400
+    && (await op('PATCH', `/api/admin/usuarios/${euBo.id}`, { email: (await bc('GET', '/api/eu')).j.usuario.email })).s === 409);
+
   console.log('--- fluxo de partidas');
   // posição 1 = muito fácil (0), posição 2 = impossível (100), o resto = regras gerais
   await op('PUT', '/api/admin/regras', { regras: { fluxo: [0, 100] } });

@@ -90,6 +90,11 @@ export const salvarRegras = async r => normalize((await api('PUT', '/admin/regra
 export const analisesPendentes = () => api('GET', '/admin/analises');
 export const decidirAnalise = (id, decisao) => api('POST', `/admin/analises/${id}`, { decisao });
 export const auditoria = () => api('GET', '/admin/auditoria');
+// usuários (operador: suporte)
+export const usuariosAdmin = ({ q = '', pagina = 1, por = 20, ordem = 'recentes' } = {}) =>
+  api('GET', '/admin/usuarios?' + new URLSearchParams({ q, pagina, por, ordem }));
+export const usuarioAdmin = id => api('GET', `/admin/usuarios/${Number(id)}`);
+export const alterarUsuarioAdmin = (id, dados) => api('PATCH', `/admin/usuarios/${Number(id)}`, dados);
 // admin local (servidor de testes com --admin-local, acessado em localhost): regras sem login
 export const adminLocal = async () => { try { return (await api('GET', '/admin/local')).local; } catch { return false; } };
 export const iniciar2fa = (senha, codigoAtivacao) => api('POST', '/admin/2fa/iniciar', { senha, codigoAtivacao });

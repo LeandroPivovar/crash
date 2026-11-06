@@ -65,11 +65,15 @@
   .fluxo-nivel.padrao span { color: var(--muted); }
   .fluxo-nivel label { color: var(--muted); font-weight: 400; display: flex; gap: 4px; align-items: center; }
   .aviso-local { background: #3b2a06; border: 1px solid #ff9a3c; color: #ffd9a8; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 14px; }
+  nav.admin { display: flex; gap: 6px; margin-bottom: 16px; }
+  nav.admin a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); font-weight: 600; }
+  nav.admin a.on { color: #1a1006; background: var(--accent); border-color: var(--accent); }
   @media (max-width: 420px) { .field { flex-direction: column; align-items: flex-start; } }
 </style>
 </head>
 <body>
 <main>
+  <nav class="admin"><a href="./" class="on">Configurações</a><a href="../usuarios/">Usuários</a></nav>
   <h1>Configurações</h1>
   <div class="aviso-local" id="aviso-local" hidden><b>Modo local de teste:</b> esta página está aberta sem login porque o servidor foi iniciado com <code>--admin-local</code> neste computador. No site publicado ela continua exigindo o operador e o app autenticador.</div>
   <p class="sub">Regras do Desafio solo (operador). Ficam salvas no servidor e valem para todas as partidas criadas depois de salvar.</p>
@@ -417,6 +421,7 @@ const EVENTOS = {
   partida_em_analise: 'pagamento foi para análise', partida_divergente: 'jogo e servidor divergiram', partida_refeita: 'partida refeita (página fechada)',
   partida_erro: 'replay falhou', analise_aprovada: 'análise aprovada', analise_recusada: 'análise recusada', gravacao_adiantada: 'gravação adiantada recusada',
   gravacao_reescrita: 'tentou reescrever a gravação', acesso_negado_operador: 'tentou rota de operador', saque: 'saque', senha_redefinida: 'senha redefinida',
+  usuario_alterado_pelo_operador: 'operador alterou um jogador', conta_alterada_pelo_suporte: 'conta alterada pelo suporte',
   recuperacao_pedida: 'pediu nova senha', perfil_alterado: 'e-mail ou senha alterados', perfil_senha_errada: 'senha atual errada no perfil',
   trava_saldo_negativo: 'trava de saldo negativo acionada',
   login_senha_ok_esperando_codigo: 'operador: senha certa, esperando código', codigo_2fa_errado: 'código do app errado',
