@@ -232,7 +232,6 @@ try {
   conferir('corrida honesta é paga pelo que o servidor refez', fimD.verificacao === 'confirmada' && fimD.frutas === g.frutas && fimD.recebido === g.frutas * fimD.porFruta,
     `${g.frutas} frutas, recebeu ${fimD.recebido}, verificação ${fimD.verificacao}, análise ${fimD.analise}`);
 
-  // pagamento alto: operador baixa o limite de análise para 0,1× → vai para análise e só paga se aprovar
   // regras com campos a mais e valores fora da faixa: o servidor só guarda os campos conhecidos, dentro dos limites
   const injetadas = (await op('PUT', '/api/admin/regras', { regras: { dificuldade: 999, operador: 1, saldo: 1e9, fruitPercent: -5, enemiesPerChunk: 500, speedMax: 'x' } })).j.regras;
   conferir('regras com campos a mais e valores absurdos', injetadas.dificuldade === 100 && !('operador' in injetadas) && !('saldo' in injetadas) && injetadas.fruitPercent >= 0.01 && injetadas.enemiesPerChunk <= 8,
@@ -339,7 +338,31 @@ try {
   conferir('admin local: pedido vindo de proxy não entra', (await pedir({ Host: 'localhost:8199', 'X-Forwarded-For': '8.8.8.8' })) === 401);
   loc.kill(); await dormir(300);
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbArq + '-local' + s); } catch {} }
-  await op('PUT', '/api/admin/regras', { regras: { analiseAcimaDe: 1, fruitPercent: 60 } });
+  console.log('--- saques (pedido, aprovação e recusa)');
+  // o jogador "a" pediu 5 saques de 10 (lá em cima): o valor saiu do saldo e eles esperam o operador
+  const pend = (await op('GET', '/api/admin/saques?estado=pendente&por=100')).j;
+  const meus = pend.saques.filter(x => x.valor === 1000 && x.estado === 'pendente');
+  conferir('saques pedidos ficam pendentes para o operador', meus.length >= 5 && pend.resumo.pendente.quantidade >= 5);
+  const [sq1, sq2, sq3] = meus;
+  conferir('jogador não aprova o próprio saque', (await a('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'aprovar' })).s === 403
+    && (await cliente()('GET', '/api/admin/saques')).s === 401);
+  const donoA = sq1.usuario.id;
+  const saldoAntesSaque = (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo;
+  const ap = await op('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'aprovar' });
+  conferir('aprovar dá baixa sem mexer no saldo', ap.s === 200 && ap.j.saque.estado === 'aprovado' && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque);
+  const rec = await op('POST', `/api/admin/saques/${sq2.id}`, { decisao: 'recusar', motivo: 'dados bancários errados' });
+  conferir('recusar devolve o valor ao saldo', rec.s === 200 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 1000);
+  conferir('saque já decidido não muda de novo', (await op('POST', `/api/admin/saques/${sq2.id}`, { decisao: 'recusar' })).s === 409
+    && (await op('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'recusar' })).s === 409);
+  const corrida = await Promise.all(Array.from({ length: 6 }, () => op('POST', `/api/admin/saques/${sq3.id}`, { decisao: 'recusar' })));
+  conferir('6 recusas ao mesmo tempo devolvem uma vez só', corrida.filter(r => r.s === 200).length === 1 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 2000);
+  const cartA = (await a('GET', '/api/carteira')).j;
+  conferir('jogador vê o estado dos saques na carteira', cartA.saques.some(x => x.id === sq1.id && x.estado === 'aprovado') && cartA.saques.some(x => x.id === sq2.id && x.estado === 'recusado' && x.motivo === 'dados bancários errados'));
+  conferir('decisão inválida', (await op('POST', `/api/admin/saques/${meus[3].id}`, { decisao: 'pagar-em-dobro' })).s === 400);
+
+  console.log('--- pagamento sem análise');
+  // pagamento alto (60% por fruta) entra direto: o controle do dinheiro que sai é a aprovação do saque
+  await op('PUT', '/api/admin/regras', { regras: { fruitPercent: 60 } });
   let pe, ge;
   for (let k = 0; k < 6; k++) {
     pe = (await c('POST', '/api/partidas', { entrada: 2000 })).j.partida;
@@ -352,17 +375,12 @@ try {
   const saldoAntes = (await c('GET', '/api/eu')).j.saldo;
   const fimE = (await c('POST', `/api/partidas/${pe.id}/encerrar`, { rle: ge.rle, frutas: ge.frutas })).j.partida;
   const saldoDepois = (await c('GET', '/api/eu')).j.saldo;
-  conferir('pagamento acima do limite fica em análise (não credita)', fimE.analise === 'pendente' && saldoDepois === saldoAntes, `a pagar ${fimE.aPagar}`);
-  const lista = (await op('GET', '/api/admin/analises')).j.partidas;
-  conferir('operador vê o pagamento em análise', lista.some(p => p.id === pe.id));
-  conferir('jogador tentando aprovar o próprio pagamento', (await c('POST', `/api/admin/analises/${pe.id}`, { decisao: 'aprovar' })).s === 403);
-  await op('POST', `/api/admin/analises/${pe.id}`, { decisao: 'aprovar' });
-  const saldoAprov = (await c('GET', '/api/eu')).j.saldo;
-  conferir('aprovação credita uma vez só', saldoAprov === saldoAntes + fimE.aPagar && (await op('POST', `/api/admin/analises/${pe.id}`, { decisao: 'aprovar' })).s === 409);
+  conferir('pagamento alto entra direto na carteira', fimE.analise === null && fimE.recebido > 0 && saldoDepois === saldoAntes + fimE.recebido, `recebeu ${fimE.recebido}`);
+  conferir('rotas antigas de análise não existem mais', (await op('GET', '/api/admin/analises')).s === 404);
   await op('PUT', '/api/admin/regras', { regras: {} });
 
-  // robô "nervoso": joga bem, mas balança o desvio para lá e para cá a cada passo (impossível para uma pessoa).
-  // Ele pega frutas de verdade; o pagamento tem que ir para análise em vez de entrar na carteira.
+  // robô "nervoso": balança o desvio a cada passo (impossível para uma pessoa). Recebe o que o replay confirmou,
+  // mas a partida fica marcada e vai para o registro de segurança.
   let pf, gf;
   for (let k = 0; k < 8; k++) {
     pf = (await c('POST', '/api/partidas', { entrada: 2000 })).j.partida;
@@ -372,13 +390,10 @@ try {
   }
   await c('POST', `/api/partidas/${pf.id}/comecar`);
   await dormir(Math.max(0, passosDe(gf.rle) / 60 * 1000 - 2500));
-  const saldoAntesF = (await c('GET', '/api/eu')).j.saldo;
-  const fimF = (await c('POST', `/api/partidas/${pf.id}/encerrar`, { rle: gf.rle, frutas: gf.frutas })).j.partida;
-  const saldoDepoisF = (await c('GET', '/api/eu')).j.saldo;
+  await c('POST', `/api/partidas/${pf.id}/encerrar`, { rle: gf.rle, frutas: gf.frutas });
   const sinais = (await op('GET', '/api/admin/auditoria')).j.eventos;
-  const motivoF = (await op('GET', '/api/admin/analises')).j.partidas.find(p => p.id === pf.id)?.motivo || '';
-  conferir('robô que inverte o desvio 60×/s vai para análise', gf.frutas > 0 && fimF.analise === 'pendente' && saldoDepoisF === saldoAntesF && /comandos rápidos/.test(motivoF),
-    `${gf.frutas} frutas, análise=${fimF.analise}, motivo: ${motivoF}`);
+  const marcado = sinais.find(ev => ev.evento === 'partida_suspeita' && String(ev.detalhe).includes(pf.id));
+  conferir('robô que inverte o desvio 60×/s fica marcado no registro', gf.frutas > 0 && !!marcado && /comandos rápidos/.test(marcado.detalhe), `${gf.frutas} frutas`);
 
   console.log('--- banco de dados');
   const db = new DatabaseSync(dbArq);

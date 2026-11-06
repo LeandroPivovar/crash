@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Saques</title>
+<style>
+  :root { --bg: #0b1020; --panel: #151b30; --panel2: #0d1224; --line: rgba(255,255,255,0.1); --text: #e8ecf5; --muted: #9aa4bb; --accent: #ff9a3c; --ok: #6fdc8c; --bad: #ff7a7a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  nav.admin { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  nav.admin a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); font-weight: 600; }
+  nav.admin a.on { color: #1a1006; background: var(--accent); border-color: var(--accent); }
+  h1 { margin: 0 0 4px; font-size: 24px; color: var(--accent); }
+  h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .sub { margin: 0 0 16px; color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .aviso-local { background: #3b2a06; border: 1px solid #ff9a3c; color: #ffd9a8; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .card small { display: block; color: var(--muted); font-size: 12px; }
+  .card b { font-size: 19px; font-variant-numeric: tabular-nums; }
+  .card.destaque { border-color: var(--accent); }
+  .filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .abas { display: flex; gap: 6px; flex-wrap: wrap; }
+  .abas button[aria-selected=true] { background: var(--accent); color: #1a1006; border-color: var(--accent); }
+  input, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; }
+  input[type=search] { flex: 1 1 240px; min-width: 0; }
+  button { background: none; color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.ok { background: #1f6b3a; border-color: #2c8a4c; color: #eafff0; }
+  button.nao { border-color: #7a2a2a; color: #ffb3b3; }
+  .tabela { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th { background: #1b2240; color: var(--muted); font-size: 12px; font-weight: 600; }
+  td.n, th.n { text-align: right; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td a { color: var(--text); }
+  .mut { color: var(--muted); }
+  .valor { font-weight: 800; color: var(--accent); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+  .tag.pendente { background: #3b2a06; color: #ffd088; } .tag.aprovado { background: #173a24; color: var(--ok); } .tag.recusado { background: #3d1a1a; color: var(--bad); }
+  .acoes { display: flex; gap: 6px; }
+  .paginacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; color: var(--muted); }
+  .paginacao div { display: flex; gap: 6px; align-items: center; }
+  .vazio { color: var(--muted); padding: 18px; text-align: center; }
+  #status { min-height: 20px; margin-bottom: 8px; color: var(--ok); }
+  #status.err { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <nav class="admin"><a href="../configuracoes/">Configurações</a><a href="../usuarios/">Usuários</a><a href="./" class="on">Saques</a></nav>
+  <h1>Saques</h1>
+  <div class="aviso-local" id="aviso-local" hidden><b>Modo local de teste:</b> aberto sem login porque o servidor foi iniciado com <code>--admin-local</code>. No site publicado continua exigindo o operador e o app autenticador.</div>
+  <p class="sub">Quando o jogador pede um saque, o valor já sai do saldo dele e fica aqui esperando. <b>Aprovar</b> dá baixa (o saque foi pago). <b>Recusar</b> devolve o valor ao saldo do jogador.</p>
+  <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador, entrando com o código do app autenticador, vê os saques.</p><a href="../configuracoes/" style="color:var(--accent)">Ir para as configurações</a></section>
+
+  <div id="painel" hidden>
+    <div class="cards" id="resumo"></div>
+    <section>
+      <div class="filtros">
+        <div class="abas" role="tablist">
+          <button type="button" role="tab" data-estado="pendente" aria-selected="true">Pendentes</button>
+          <button type="button" role="tab" data-estado="aprovado" aria-selected="false">Aprovados</button>
+          <button type="button" role="tab" data-estado="recusado" aria-selected="false">Recusados</button>
+          <button type="button" role="tab" data-estado="" aria-selected="false">Todos</button>
+        </div>
+        <input type="search" id="busca" placeholder="Buscar por nome, e-mail ou #ID do jogador" aria-label="Buscar saque" autocomplete="off">
+        <select id="por" aria-label="Por página"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </div>
+      <div id="status" role="status"></div>
+      <div class="tabela">
+        <table id="lista">
+          <thead><tr><th>#</th><th>Jogador</th><th>E-mail</th><th class="n">Valor</th><th>Pedido em</th><th>Estado</th><th class="n">Saldo atual</th><th>Ações / decisão</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="paginacao">
+        <span id="contagem"></span>
+        <div><button type="button" id="ant">‹ Anterior</button><span id="pag"></span><button type="button" id="prox">Próxima ›</button></div>
+      </div>
+    </section>
+  </div>
+</main>
+<script type="module">
+import * as arena from '../../js/arena.js';
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const data = t => (t ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(t)) : '—');
+const brl = c => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c / 100);
+const ROTULO = { pendente: 'Pendente', aprovado: 'Aprovado (pago)', recusado: 'Recusado (devolvido)' };
+
+const local = await arena.adminLocal();
+const { usuario } = await arena.sessao().catch(() => ({}));
+if (local) $('aviso-local').hidden = false;
+const pode = local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores);
+if (!pode) {
+  $('sem-acesso').hidden = false;
+  if (usuario && !usuario.operador) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador.`;
+} else $('painel').hidden = false;
+
+const estado = { estado: 'pendente', q: '', pagina: 1, por: 20 };
+let pedido = 0;
+function dizer(t, erro = false) { $('status').textContent = t; $('status').classList.toggle('err', erro); }
+async function carregar() {
+  const n = ++pedido, tb = $('lista').querySelector('tbody');
+  try {
+    const r = await arena.saquesAdmin(estado);
+    if (n !== pedido) return;
+    estado.pagina = r.pagina;
+    const s = r.resumo;
+    $('resumo').innerHTML =
+      `<div class="card destaque"><small>Pendentes</small><b>${s.pendente.quantidade}</b><small>${brl(s.pendente.valor)} esperando</small></div>` +
+      `<div class="card"><small>Aprovados (pagos)</small><b>${s.aprovado.quantidade}</b><small>${brl(s.aprovado.valor)}</small></div>` +
+      `<div class="card"><small>Recusados (devolvidos)</small><b>${s.recusado.quantidade}</b><small>${brl(s.recusado.valor)}</small></div>`;
+    tb.innerHTML = r.saques.length ? r.saques.map(x => `<tr data-id="${x.id}">
+      <td class="mut">${x.id}</td>
+      <td><a href="../usuarios/#u=${x.usuario.id}">${esc(x.usuario.nome)}</a> <span class="mut">#${x.usuario.id}</span></td>
+      <td>${esc(x.usuario.email) || '<span class="mut">—</span>'}</td>
+      <td class="n valor">${brl(x.valor)}</td>
+      <td>${data(x.criado)}</td>
+      <td><span class="tag ${x.estado}">${ROTULO[x.estado]}</span></td>
+      <td class="n">${brl(x.saldoAtual)}</td>
+      <td>${x.estado === 'pendente'
+        ? '<div class="acoes"><button type="button" class="ok" data-decisao="aprovar">Aprovar (dar baixa)</button><button type="button" class="nao" data-decisao="recusar">Recusar (devolver)</button></div>'
+        : `<span class="mut">${data(x.decidido)}${x.motivo ? ` · ${esc(x.motivo)}` : ''}</span>`}</td></tr>`).join('')
+      : `<tr><td colspan="8" class="vazio">${estado.estado === 'pendente' ? 'Nenhum saque esperando aprovação.' : 'Nenhum saque encontrado.'}</td></tr>`;
+    $('contagem').textContent = r.total ? `${(r.pagina - 1) * r.por + 1}–${Math.min(r.total, r.pagina * r.por)} de ${r.total}` : '';
+    $('pag').textContent = `Página ${r.pagina} de ${r.paginas}`;
+    $('ant').disabled = r.pagina <= 1; $('prox').disabled = r.pagina >= r.paginas;
+  } catch (err) { tb.innerHTML = `<tr><td colspan="8" class="vazio">${esc(err.message)}</td></tr>`; }
+}
+
+$('lista').addEventListener('click', async e => {
+  const b = e.target.closest('[data-decisao]');
+  if (!b) return;
+  const tr = b.closest('tr'), id = tr.dataset.id;
+  const nome = tr.children[1].textContent.trim(), valor = tr.querySelector('.valor').textContent;
+  let motivo = '';
+  if (b.dataset.decisao === 'aprovar') {
+    if (!confirm(`Aprovar o saque de ${valor} para ${nome}?\n\nConfirme só depois de enviar o pagamento. O saque fica como pago.`)) return;
+  } else {
+    motivo = prompt(`Recusar o saque de ${valor} para ${nome}?\nO valor volta para o saldo do jogador.\n\nMotivo (opcional, aparece no extrato dele):`, '');
+    if (motivo === null) return;
+  }
+  tr.querySelectorAll('button').forEach(x => { x.disabled = true; });
+  try {
+    await arena.decidirSaque(id, b.dataset.decisao, motivo);
+    dizer(b.dataset.decisao === 'aprovar' ? `Saque de ${valor} aprovado e baixado.` : `Saque de ${valor} recusado; o valor voltou para o saldo de ${nome}.`);
+  } catch (err) { dizer(err.message, true); }
+  carregar();
+});
+document.querySelectorAll('[data-estado]').forEach(b => b.addEventListener('click', () => {
+  estado.estado = b.dataset.estado; estado.pagina = 1;
+  document.querySelectorAll('[data-estado]').forEach(x => x.setAttribute('aria-selected', x === b));
+  carregar();
+}));
+let t;
+$('busca').addEventListener('input', e => { clearTimeout(t); t = setTimeout(() => { estado.q = e.target.value.trim(); estado.pagina = 1; carregar(); }, 250); });
+$('por').addEventListener('change', e => { estado.por = Number(e.target.value); estado.pagina = 1; carregar(); });
+$('ant').addEventListener('click', () => { estado.pagina--; carregar(); });
+$('prox').addEventListener('click', () => { estado.pagina++; carregar(); });
+if (pode) carregar();
+</script>
+</body>
+</html>

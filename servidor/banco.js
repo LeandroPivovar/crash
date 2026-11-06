@@ -93,6 +93,19 @@ for (const sql of [
   'ALTER TABLE usuarios ADD COLUMN bonus_deposito INTEGER NOT NULL DEFAULT 0',
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
 db.exec(`
+-- Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado = lançamento 'estorno' devolve.
+CREATE TABLE IF NOT EXISTS saques (
+  id          INTEGER PRIMARY KEY,
+  usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),
+  valor       INTEGER NOT NULL CHECK (valor > 0),
+  estado      TEXT NOT NULL CHECK (estado IN ('pendente','aprovado','recusado')),
+  criado      INTEGER NOT NULL,
+  decidido    INTEGER,
+  operador_id INTEGER,
+  motivo      TEXT
+);
+CREATE INDEX IF NOT EXISTS saques_estado ON saques(estado, criado);
+CREATE INDEX IF NOT EXISTS saques_usuario ON saques(usuario_id, id);
 CREATE TABLE IF NOT EXISTS confirmacoes (
   token_hash  TEXT PRIMARY KEY,
   usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

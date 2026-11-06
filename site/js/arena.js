@@ -88,8 +88,9 @@ export async function historicoPartidas() { return (await api('GET', '/partidas'
 
 // ---------- operador ----------
 export const salvarRegras = async r => normalize((await api('PUT', '/admin/regras', { regras: r })).regras);
-export const analisesPendentes = () => api('GET', '/admin/analises');
-export const decidirAnalise = (id, decisao) => api('POST', `/admin/analises/${id}`, { decisao });
+export const saquesAdmin = ({ estado = 'pendente', q = '', pagina = 1, por = 20 } = {}) =>
+  api('GET', '/admin/saques?' + new URLSearchParams({ estado, q, pagina, por }));
+export const decidirSaque = (id, decisao, motivo = '') => api('POST', `/admin/saques/${Number(id)}`, { decisao, motivo });
 export const auditoria = () => api('GET', '/admin/auditoria');
 // usuários (operador: suporte)
 export const usuariosAdmin = ({ q = '', pagina = 1, por = 20, ordem = 'recentes' } = {}) =>

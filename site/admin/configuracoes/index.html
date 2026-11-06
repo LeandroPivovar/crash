@@ -34,11 +34,6 @@
   #ativar-2fa p { color: var(--text); font-size: 14px; }
   #ativar-2fa a { color: var(--accent); }
   .status-2fa { min-height: 20px; color: #ff7a7a; margin-top: 8px; }
-  .analise { border-top: 1px solid var(--line); padding: 10px 0; display: grid; gap: 6px; }
-  .analise:first-child { border-top: 0; }
-  .analise b { color: var(--accent); }
-  .analise small { color: var(--muted); }
-  .analise .botoes { display: flex; gap: 8px; }
   .vazio { color: var(--muted); font-size: 14px; margin: 0; }
   .eventos { max-height: 320px; overflow: auto; font-size: 13px; }
   .eventos div { display: flex; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
@@ -79,7 +74,7 @@
 </head>
 <body>
 <main>
-  <nav class="admin"><a href="./" class="on">Configurações</a><a href="../usuarios/">Usuários</a></nav>
+  <nav class="admin"><a href="./" class="on">Configurações</a><a href="../usuarios/">Usuários</a><a href="../saques/">Saques</a></nav>
   <h1>Configurações</h1>
   <div class="aviso-local" id="aviso-local" hidden><b>Modo local de teste:</b> esta página está aberta sem login porque o servidor foi iniciado com <code>--admin-local</code> neste computador. No site publicado ela continua exigindo o operador e o app autenticador.</div>
   <p class="sub">Regras do Desafio solo (operador). Ficam salvas no servidor e valem para todas as partidas criadas depois de salvar.</p>
@@ -197,14 +192,6 @@
       </div>
     </section>
 
-    <section>
-      <h2>Proteção</h2>
-      <div class="field">
-        <label for="analiseAcimaDe">Analisar pagamentos acima de (× a entrada)<small>Pagamento maior que isso não é creditado na hora: fica em análise até você aprovar. Pagamentos com sinais de robô também vão para análise.</small></label>
-        <div class="ctrl"><input type="number" id="analiseAcimaDe" min="1" max="1000" step="0.5"><span class="unit">×</span></div>
-      </div>
-    </section>
-
     <div class="actions">
       <button type="submit" class="primary">Salvar</button>
       <button type="button" id="reset">Restaurar padrão</button>
@@ -213,10 +200,6 @@
     <div id="status" role="status"></div>
   </form>
 
-  <section id="analises" hidden>
-    <h2>Pagamentos em análise</h2>
-    <div id="lista-analises"></div>
-  </section>
   <section id="auditoria" hidden>
     <h2>Eventos de segurança recentes</h2>
     <div id="lista-auditoria" class="eventos"></div>
@@ -337,7 +320,6 @@ function fill(c) {
   $('speedMax').value = c.speedMax;
   $('pitsMin').value = c.pitsMin;
   $('pitsMax').value = c.pitsMax;
-  $('analiseAcimaDe').value = c.analiseAcimaDe;
 }
 function read() {
   return {
@@ -351,7 +333,6 @@ function read() {
     speedMax: $('speedMax').value,
     pitsMin: $('pitsMin').value,
     pitsMax: $('pitsMax').value,
-    analiseAcimaDe: $('analiseAcimaDe').value,
     dificuldade,
     fluxo: lerFluxo(),
     fluxoLimiar: lerLimiar(),
@@ -421,37 +402,13 @@ $('confirmar-2fa').addEventListener('click', async () => {
 $('guardei-2fa').addEventListener('click', () => location.reload());
 $('sair-2fa').addEventListener('click', async () => { await arena.sair().catch(() => {}); location.href = '/'; });
 
-// ---- pagamentos em análise: aprovar credita na carteira do jogador; recusar não paga ----
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const data = t => new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(t));
-async function mostrarAnalises() {
-  const el = $('lista-analises');
-  try {
-    const { partidas } = await arena.analisesPendentes();
-    if (!partidas.length) { el.innerHTML = '<p class="vazio">Nenhum pagamento esperando análise.</p>'; return; }
-    el.innerHTML = partidas.map(p => `<div class="analise" data-id="${esc(p.id)}">
-      <div><b>✦ ${arena.moedas(p.aPagar)}</b> para ${esc(p.jogador)} ${p.email ? `(${esc(p.email)})` : '(visitante)'}</div>
-      <small>${data(p.encerrada)} · entrada ✦ ${arena.moedas(p.entrada)} · ${p.frutas} frutas confirmadas pelo replay${p.frutasInformadas != null ? ` (o jogo disse ${p.frutasInformadas})` : ''}</small>
-      <small>Motivo: ${esc(p.motivo)}${p.sinais ? ` · até ${p.sinais.viradasPorSegundoMax ?? p.sinais.trocasPorSegundoMax} viradas de comando e ${p.sinais.pulosPorSegundoMax} pulos por segundo` : ''}</small>
-      <div class="botoes"><button type="button" class="primary" data-decisao="aprovar">Aprovar e pagar</button><button type="button" data-decisao="recusar">Recusar</button></div>
-    </div>`).join('');
-  } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
-}
-$('lista-analises').addEventListener('click', async e => {
-  const b = e.target.closest('[data-decisao]');
-  if (!b) return;
-  const id = b.closest('[data-id]').dataset.id;
-  if (b.dataset.decisao === 'aprovar' && !confirm('Aprovar e creditar este pagamento?')) return;
-  b.disabled = true;
-  try { await arena.decidirAnalise(id, b.dataset.decisao); say(b.dataset.decisao === 'aprovar' ? 'Pagamento aprovado e creditado.' : 'Pagamento recusado.'); }
-  catch (err) { say(err.message, true); }
-  await mostrarAnalises();
-  await mostrarAuditoria();
-});
 const EVENTOS = {
   login: 'entrou', login_operador: 'operador entrou', login_falhou: 'login errado', cadastro: 'conta criada', visitante: 'visitante entrou',
   cadastro_menor: 'cadastro recusado (menor de 18)', limite_excedido: 'excesso de pedidos bloqueado', regras_alteradas: 'regras alteradas',
-  partida_em_analise: 'pagamento foi para análise', partida_divergente: 'jogo e servidor divergiram', partida_refeita: 'partida refeita (página fechada)',
+  partida_em_analise: 'pagamento foi para análise', partida_suspeita: 'partida com sinais suspeitos (paga)', analise_liquidada: 'análise antiga paga',
+  saque_aprovado: 'saque aprovado (pago)', saque_recusado: 'saque recusado (devolvido)', saque_pago: 'saque pago', saque_devolvido: 'saque devolvido', partida_divergente: 'jogo e servidor divergiram', partida_refeita: 'partida refeita (página fechada)',
   partida_erro: 'replay falhou', analise_aprovada: 'análise aprovada', analise_recusada: 'análise recusada', gravacao_adiantada: 'gravação adiantada recusada',
   gravacao_reescrita: 'tentou reescrever a gravação', acesso_negado_operador: 'tentou rota de operador', saque: 'saque', senha_redefinida: 'senha redefinida',
   usuario_alterado_pelo_operador: 'operador alterou um jogador', conta_alterada_pelo_suporte: 'conta alterada pelo suporte',
@@ -470,9 +427,7 @@ async function mostrarAuditoria() {
   } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
 }
 if (local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores)) {
-  $('analises').hidden = false;
   $('auditoria').hidden = false;
-  await mostrarAnalises();
   await mostrarAuditoria();
 }
 </script>

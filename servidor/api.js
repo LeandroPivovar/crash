@@ -315,7 +315,8 @@ async function refazerPartida(p) {
 }
 
 // Encerra com o resultado do replay (r) — dentro de transação; não faz nada se a partida já terminou.
-// Pagamento suspeito (robô) ou acima de `analiseAcimaDe` × a entrada não é creditado: fica em análise.
+// Paga na hora as frutas que o replay confirmou (o controle do dinheiro que sai fica na aprovação dos saques).
+// Sinais de robô e divergências não seguram o pagamento: ficam anotados na partida e no registro de auditoria.
 function finalizar(id, r, tempoMs) {
   const p = db.prepare('SELECT * FROM partidas WHERE id = ?').get(id);
   if (!p || p.estado !== 'jogando') return p;
@@ -328,10 +329,8 @@ function finalizar(id, r, tempoMs) {
   const motivos = [];
   if (r && r.sinais.viradasPorSegundoMax > LIMITE_VIRADAS_POR_SEGUNDO) motivos.push(`comandos rápidos demais (${r.sinais.viradasPorSegundoMax} viradas/s)`);
   if (r && r.sinais.pulosPorSegundoMax > LIMITE_PULOS_POR_SEGUNDO) motivos.push(`pulos rápidos demais (${r.sinais.pulosPorSegundoMax}/s)`);
-  if (valor > p.entrada * regras.analiseAcimaDe) motivos.push(`pagamento acima de ${regras.analiseAcimaDe}× a entrada`);
   if (verificacao === 'divergente') motivos.push('o jogo informou outro número de frutas');
-  const emAnalise = valor > 0 && motivos.length > 0;
-  const recebido = emAnalise ? 0 : valor;
+  const recebido = valor;
   const l = regras.limiar, passou = l && f > l.frutas;
   if (recebido > 0) lancar(p.usuario_id, 'premio', recebido, passou
     ? `Frutas · ${l.frutas} × ${moedas(porFruta)} + ${f - l.frutas} × ${moedas(valorPorFruta(p.entrada, l.depois))} (após o limiar)`
@@ -339,9 +338,9 @@ function finalizar(id, r, tempoMs) {
   db.prepare(`UPDATE partidas SET estado = 'encerrada', encerrada = ?, frutas = ?, distancia = ?, tempo_ms = ?, por_fruta = ?,
       recebido = ?, verificacao = ?, analise = ?, motivo_analise = ?, sinais = ? WHERE id = ?`)
     .run(agora(), f, r ? r.distancia : 0, Math.max(0, Math.min(DURACAO_MAX_MS, Math.round(Number(tempoMs) || 0))), porFruta, recebido, verificacao,
-      emAnalise ? 'pendente' : null, motivos.join('; ') || null, r ? JSON.stringify(r.sinais) : null, p.id);
-  if (emAnalise) auditar('partida_em_analise', { u: p.usuario_id, detalhe: { partida: p.id, frutas: f, valor, motivos } });
-  else if (verificacao !== 'confirmada') auditar(`partida_${verificacao}`, { u: p.usuario_id, detalhe: { partida: p.id, informadas: inf, replay: f } });
+      null, motivos.join('; ') || null, r ? JSON.stringify(r.sinais) : null, p.id);
+  if (motivos.length) auditar('partida_suspeita', { u: p.usuario_id, detalhe: { partida: p.id, frutas: f, valor, motivos } });
+  if (verificacao !== 'confirmada') auditar(`partida_${verificacao}`, { u: p.usuario_id, detalhe: { partida: p.id, informadas: inf, replay: f } });
   return db.prepare('SELECT * FROM partidas WHERE id = ?').get(p.id);
 }
 async function encerrarComReplay(p, tempoMs) {
@@ -570,6 +569,7 @@ const bonusDisponivel = uid => {
 rota('GET', '/api/carteira', { login: true }, ({ u }) => ({
   saldo: saldo(u.id),
   bonus: bonusDisponivel(u.id) ? BONUS : null,
+  saques: db.prepare('SELECT * FROM saques WHERE usuario_id = ? ORDER BY id DESC LIMIT 50').all(u.id).map(saquePublico),
   movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(u.id),
 }));
 rota('POST', '/api/carteira/deposito', { login: true }, ({ u, corpo }) => {
@@ -607,9 +607,11 @@ rota('POST', '/api/carteira/saque', { login: true }, ({ u, corpo, ip }) => {
     const v = centavos(corpo.valor);
     if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
     if (v > saldo(u.id)) throw new Erro(400, 'Moedas insuficientes para esse saque.');
-    lancar(u.id, 'saque', -v, 'Saque simulado');
-    auditar('saque', { u, ip, detalhe: { valor: v } });
-    return { saldo: saldo(u.id) };
+    // o valor sai do saldo agora (reservado) e o pedido espera o operador: aprovado = pago; recusado = volta ao saldo
+    lancar(u.id, 'saque', -v, 'Saque solicitado · aguardando aprovação');
+    const id = Number(db.prepare("INSERT INTO saques (usuario_id, valor, estado, criado) VALUES (?, ?, 'pendente', ?)").run(u.id, v, agora()).lastInsertRowid);
+    auditar('saque', { u, ip, detalhe: { valor: v, saque: id } });
+    return { saldo: saldo(u.id), saque: saquePublico(db.prepare('SELECT * FROM saques WHERE id = ?').get(id)) };
   });
 });
 
@@ -800,23 +802,46 @@ rota('PUT', '/api/admin/regras', { operador: true }, ({ corpo, u, ip }) => {
   auditar('regras_alteradas', { u, ip, detalhe: { antes, depois: r } });
   return { regras: r };
 });
-// análise de pagamentos (operador)
-rota('GET', '/api/admin/analises', { operador: true }, () => ({
-  partidas: db.prepare(`SELECT p.*, us.nome AS jogador, us.email AS email FROM partidas p JOIN usuarios us ON us.id = p.usuario_id
-      WHERE p.analise = 'pendente' ORDER BY p.encerrada LIMIT 200`).all()
-    .map(p => ({ ...partidaPublica(p, { comSemente: false }), jogador: p.jogador, email: p.email || '', motivo: p.motivo_analise, sinais: p.sinais ? JSON.parse(p.sinais) : null })),
-}));
-rota('POST', '/api/admin/analises/([\\w-]+)', { operador: true }, ({ m, corpo, u, ip }) => transacao(() => {
-  if (!idValido(m[1])) throw new Erro(404, 'Partida não encontrada.');
-  const p = db.prepare('SELECT * FROM partidas WHERE id = ?').get(m[1]);
-  if (!p || p.analise !== 'pendente') throw new Erro(409, 'Essa partida não está em análise.');
+// Saques (operador): o jogador pede, o valor sai do saldo na hora (reservado) e fica pendente.
+// Aprovar = dar baixa (o dinheiro foi enviado); recusar = devolve o valor ao saldo (lançamento de estorno).
+const saquePublico = s => s && ({
+  id: s.id, valor: s.valor, estado: s.estado, criado: s.criado, decidido: s.decidido, motivo: s.motivo || '',
+  ...(s.jogador !== undefined ? { usuario: { id: s.usuario_id, nome: s.jogador, email: s.email || '' } } : {}),
+});
+rota('GET', '/api/admin/saques', { operador: true }, ({ req }) => {
+  const q = consulta(req);
+  const estado = ['pendente', 'aprovado', 'recusado'].includes(q.get('estado')) ? q.get('estado') : null;
+  const busca = String(q.get('q') || '').trim().slice(0, 120);
+  const por = Math.min(100, Math.max(5, Number(q.get('por')) || 20));
+  const pagina = Math.max(1, Math.floor(Number(q.get('pagina')) || 1));
+  const like = `%${busca.replace(/[\\%_]/g, c => '\\' + c)}%`;
+  const onde = "(? IS NULL OR s.estado = ?) AND (? = '' OR us.nome LIKE ? ESCAPE '\\' OR us.email LIKE ? ESCAPE '\\' OR us.id = ?)";
+  const args = [estado, estado, busca, like, like, /^#?\d+$/.test(busca) ? Number(busca.replace('#', '')) : -1];
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM saques s JOIN usuarios us ON us.id = s.usuario_id WHERE ${onde}`).get(...args).n;
+  const lista = db.prepare(`SELECT s.*, us.nome AS jogador, us.email AS email FROM saques s JOIN usuarios us ON us.id = s.usuario_id WHERE ${onde}
+      ORDER BY CASE s.estado WHEN 'pendente' THEN 0 ELSE 1 END, CASE s.estado WHEN 'pendente' THEN s.criado ELSE -COALESCE(s.decidido, s.criado) END LIMIT ? OFFSET ?`)
+    .all(...args, por, (pagina - 1) * por).map(x => ({ ...saquePublico(x), saldoAtual: saldo(x.usuario_id) }));
+  const resumo = Object.fromEntries(['pendente', 'aprovado', 'recusado'].map(e => {
+    const r = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(valor), 0) AS v FROM saques WHERE estado = ?').get(e);
+    return [e, { quantidade: r.n, valor: r.v }];
+  }));
+  return { total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)), saques: lista, resumo };
+});
+rota('POST', '/api/admin/saques/(\\d{1,12})', { operador: true }, ({ m, corpo, u, ip }) => transacao(() => {
+  const s = db.prepare('SELECT * FROM saques WHERE id = ?').get(Number(m[1]));
+  if (!s) throw new Erro(404, 'Saque não encontrado.');
+  if (s.estado !== 'pendente') throw new Erro(409, `Esse saque já foi ${s.estado}.`);
   const aprovar = corpo.decisao === 'aprovar';
   if (!aprovar && corpo.decisao !== 'recusar') throw new Erro(400, 'Decisão inválida.');
-  const valor = valorFrutasDa(p);
-  if (aprovar && valor > 0) lancar(p.usuario_id, 'premio', valor, `Frutas (após análise) · ${p.frutas} × ${moedas(p.por_fruta)}`, p.id);
-  db.prepare('UPDATE partidas SET analise = ?, recebido = ? WHERE id = ?').run(aprovar ? 'aprovada' : 'recusada', aprovar ? valor : 0, p.id);
-  auditar(aprovar ? 'analise_aprovada' : 'analise_recusada', { u, ip, detalhe: { partida: p.id, valor } });
-  return { ok: true };
+  const motivo = texto(corpo.motivo, 200);
+  // o UPDATE só vale se ainda estiver pendente: dois cliques ao mesmo tempo não devolvem duas vezes
+  const mudou = db.prepare('UPDATE saques SET estado = ?, decidido = ?, operador_id = ?, motivo = ? WHERE id = ? AND estado = ?')
+    .run(aprovar ? 'aprovado' : 'recusado', agora(), u.id, motivo || null, s.id, 'pendente').changes;
+  if (mudou !== 1) throw new Erro(409, 'Esse saque já foi decidido.');
+  if (!aprovar) lancar(s.usuario_id, 'estorno', s.valor, `Saque recusado · valor devolvido${motivo ? ` (${motivo})` : ''}`);
+  auditar(aprovar ? 'saque_aprovado' : 'saque_recusado', { u, ip, detalhe: { saque: s.id, usuario: s.usuario_id, valor: s.valor, motivo } });
+  auditar(aprovar ? 'saque_pago' : 'saque_devolvido', { u: s.usuario_id, ip, detalhe: { saque: s.id, valor: s.valor } });
+  return { saque: saquePublico(db.prepare('SELECT * FROM saques WHERE id = ?').get(s.id)) };
 }));
 // ---------- usuários (operador: suporte) ----------
 // Somas por jogador vindas do livro-razão. "resultado" = o que o jogador ganhou ou perdeu jogando
@@ -996,10 +1021,23 @@ function prepararOperador() {
   try { fs.writeFileSync(path.join(path.dirname(require('./banco').arquivo), 'operador-inicial.txt'), msg + '\n', { mode: 0o600 }); } catch {}
 }
 
+// A análise de pagamentos saiu (o controle agora é a aprovação dos saques): partidas que ficaram em análise
+// recebem as frutas que o replay já tinha confirmado, uma vez só (o UPDATE só pega as pendentes).
+function liquidarAnalisesAntigas() {
+  for (const p of db.prepare("SELECT * FROM partidas WHERE analise = 'pendente'").all()) {
+    transacao(() => {
+      if (db.prepare("UPDATE partidas SET analise = 'aprovada', recebido = ? WHERE id = ? AND analise = 'pendente'").run(valorFrutasDa(p), p.id).changes !== 1) return;
+      const valor = valorFrutasDa(p);
+      if (valor > 0) lancar(p.usuario_id, 'premio', valor, `Frutas · ${p.frutas} (pagamento que estava em análise)`, p.id);
+      auditar('analise_liquidada', { u: p.usuario_id, detalhe: { partida: p.id, valor } });
+    });
+  }
+}
 async function iniciar() {
   cfg = await import(pathToFileURL(path.join(__dirname, '..', 'site', 'js', 'jogo', 'config.js')).href);
   prepararOperador();
   prepararCodigoAtivacao();
+  liquidarAnalisesAntigas();
   replay.iniciar(); // a thread de replay já carrega o nível ao subir o servidor
   require('./backup').agendar(db, require('./banco').arquivo);
 }

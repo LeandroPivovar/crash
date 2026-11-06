@@ -23,6 +23,11 @@ async function render() {
   $('movimentos').innerHTML = c.movimentos.length
     ? c.movimentos.map(m => `<li><span>${NOMES[m.tipo] || esc(m.tipo)}<small>${esc(m.descricao)} · ${quando(m.quando)}</small></span>${comSinal(m.valor)}</li>`).join('')
     : '<li class="vazio">Nenhum movimento ainda.</li>';
+  // pedidos de saque: o valor sai do saldo ao pedir; aprovado = pago, recusado = volta ao saldo
+  const ESTADO = { pendente: 'Aguardando aprovação', aprovado: 'Pago', recusado: 'Recusado · valor devolvido' };
+  const saques = c.saques || [];
+  $('saques-box').hidden = !saques.length;
+  $('saques').innerHTML = saques.map(s => `<li><span>${ESTADO[s.estado] || esc(s.estado)}<small>Pedido em ${quando(s.criado)}${s.decidido ? ` · decidido em ${quando(s.decidido)}` : ''}${s.motivo ? ` · ${esc(s.motivo)}` : ''}</small></span><b class="${s.estado === 'recusado' ? '' : 'loss'}">${brl(s.valor)}</b></li>`).join('');
 }
 function renderBotoes() {
   $('metodos').hidden = acao !== 'deposito';
@@ -82,7 +87,7 @@ $('saque-ok').addEventListener('click', e => ocupado(e.currentTarget, async () =
     await arena.sacar(pendente, codigo);
     pendente = 0;
     $('dlg-saque').close();
-    toast('Saque simulado concluído. Nenhum dinheiro foi movimentado.');
+    toast('Saque solicitado! O valor fica reservado até a aprovação.');
     await render();
   } catch (err) {
     if (err.codigo === 'precisa_codigo') { $('saque-erro').textContent = err.message; $('saque-codigo').select(); }
