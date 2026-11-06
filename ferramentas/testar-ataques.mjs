@@ -56,8 +56,9 @@ async function linkDoEmail(email, pagina = 'confirmar') {
 const novaConta = async (nome = 'Jogador') => {
   const c = cliente();
   const email = `${nome.toLowerCase()}${Date.now()}${Math.random().toString(36).slice(2, 6)}@x.com`;
-  await c('POST', '/api/cadastro', { nome, email, senha: 'senha-boa-123', nascimento: '1990-05-05' });
-  await c('POST', '/api/confirmar', { token: await linkDoEmail(email) });
+  const r = await c('POST', '/api/cadastro', { nome, email, senha: 'senha-boa-123', nascimento: '1990-05-05' });
+  // com confirmação de e-mail ligada no servidor (ARENA_CONFIRMAR_EMAIL=1), entra pelo link
+  if (r.j?.confirmar) await c('POST', '/api/confirmar', { token: await linkDoEmail(email) });
   return c;
 };
 // robô que joga com a semente da partida (mesma simulação do jogo) e grava os comandos
@@ -91,13 +92,9 @@ try {
   conferir('senha fraca', (await v('POST', '/api/cadastro', { nome: 'Fraco', email: `fr${Date.now()}@x.com`, senha: 'aaaaaaaa', nascimento: '1990-01-01' })).s === 400);
   const emailNovo = `novo${Date.now()}@x.com`, novo = cliente();
   const cad = await novo('POST', '/api/cadastro', { nome: 'Novo', email: emailNovo, senha: 'senha-boa-123', nascimento: '1990-01-01' });
-  conferir('cadastro não abre sessão antes de confirmar o e-mail', cad.j?.confirmar === true && (await novo('GET', '/api/eu')).j.usuario === null);
-  const semConf = await novo('POST', '/api/login', { email: emailNovo, senha: 'senha-boa-123' });
-  conferir('login com e-mail não confirmado', semConf.s === 403 && semConf.j.codigo === 'confirmar_email');
+  // confirmação de e-mail desligada (padrão): o cadastro já entra; os links de confirmação inventados continuam inválidos
+  conferir('cadastro entra direto (sem confirmação de e-mail)', !cad.j?.confirmar && (await novo('GET', '/api/eu')).j.usuario?.email === emailNovo);
   conferir('link de confirmação inventado', (await novo('POST', '/api/confirmar', { token: 'A'.repeat(43) })).s === 400);
-  const tokNovo = await linkDoEmail(emailNovo);
-  conferir('link de confirmação certo entra', (await novo('POST', '/api/confirmar', { token: tokNovo })).s === 200 && (await novo('GET', '/api/eu')).j.usuario?.email === emailNovo);
-  conferir('link de confirmação não vale duas vezes', (await cliente()('POST', '/api/confirmar', { token: tokNovo })).s === 400);
   conferir('criar conta anônima direto pela API (sem o botão de visitante)', (await cliente()('POST', '/api/visitante', { maior18: true })).s === 404);
   conferir('cookie de sessão inventado', (await cliente()('GET', '/api/eu', undefined, { cookie: 'arena_sessao=' + 'A'.repeat(43) })).j.usuario === null);
   const alvo = await novaConta('Alvo'); const emailAlvo = (await alvo('GET', '/api/eu')).j.usuario.email;

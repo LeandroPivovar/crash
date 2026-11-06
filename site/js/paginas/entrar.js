@@ -1,5 +1,5 @@
-// Entrar: login, criar conta (com data de nascimento e confirmação de 18+; só entra depois de confirmar
-// o e-mail) ou recuperar senha.
+// Entrar: login, criar conta (com data de nascimento e confirmação de 18+; entra direto, ou depois de confirmar
+// o e-mail se o servidor exigir) ou recuperar senha.
 import * as arena from '../arena.js';
 import { ocupado } from './comum.js';
 
@@ -72,8 +72,9 @@ $('auth').addEventListener('submit', e => {
         if ($('confirmar').value !== senha) return falhar('As senhas precisam ser iguais.', 'confirmar');
         if (!$('nascimento').value) return falhar('Informe sua data de nascimento.', 'nascimento');
         if (!$('maior18').checked) return falhar('Confirme que você tem 18 anos ou mais.', 'maior18');
-        await arena.cadastrar({ nome: $('nome').value, email, senha, nascimento: $('nascimento').value });
-        // a conta só entra depois de confirmar o e-mail
+        const c = await arena.cadastrar({ nome: $('nome').value, email, senha, nascimento: $('nascimento').value });
+        if (!c.confirmar) { location.href = 'lobby/'; return; } // sem confirmação de e-mail: já entrou
+        // servidor exigindo confirmação (ARENA_CONFIRMAR_EMAIL=1): a conta só entra depois do link
         trocarModo('entrar');
         $('email').value = email; $('senha').value = '';
         avisar(`Conta criada! Enviamos um link de confirmação para ${email}. Abra o e-mail (veja também o spam) e clique no link para entrar.`);

@@ -365,6 +365,8 @@ const rotas = [];
 const rota = (metodo, padrao, opcoes, fn) => rotas.push({ metodo, padrao: new RegExp(`^${padrao}$`), ...opcoes, fn });
 
 // conta
+// Confirmação de e-mail: desligada por padrão (o cadastro já entra). ARENA_CONFIRMAR_EMAIL=1 volta a exigir o link.
+const CONFIRMAR_EMAIL = process.env.ARENA_CONFIRMAR_EMAIL === '1';
 rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   limitar(`cadastro:${ip}`, CONTAS_POR_HORA, 60 * 60e3, 'Muitas contas criadas daqui. Tente mais tarde.');
   const nome = texto(corpo.nome, 30), email = texto(corpo.email, 120).toLowerCase(), senha = String(corpo.senha || '');
@@ -376,11 +378,15 @@ rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   if (!(a >= 0 && a < 130)) throw new Erro(400, 'Informe sua data de nascimento.');
   if (a < IDADE_MIN) { auditar('cadastro_menor', { ip }); throw new Erro(403, 'O Crash Arena é só para maiores de 18 anos.'); }
   if (db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new Erro(409, 'Já existe uma conta com esse e-mail.');
-  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado) VALUES (?, ?, ?, ?, ?, 0)').run(nome, email, hashSenha(senha), corpo.nascimento, agora());
+  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado) VALUES (?, ?, ?, ?, ?, ?)').run(nome, email, hashSenha(senha), corpo.nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1);
   auditar('cadastro', { u: Number(r.lastInsertRowid), ip });
-  // a conta só entra depois de confirmar o e-mail (link enviado agora)
-  enviarConfirmacao(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(r.lastInsertRowid), req);
-  return { confirmar: true, email };
+  if (CONFIRMAR_EMAIL) {
+    // a conta só entra depois de confirmar o e-mail (link enviado agora)
+    enviarConfirmacao(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(r.lastInsertRowid), req);
+    return { confirmar: true, email };
+  }
+  criarSessao(res, req, Number(r.lastInsertRowid));
+  return { usuario: publico(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(r.lastInsertRowid)) };
 });
 rota('POST', '/api/login', {}, ({ corpo, res, req, ip }) => {
   const email = texto(corpo.email, 120).toLowerCase();
@@ -391,7 +397,7 @@ rota('POST', '/api/login', {}, ({ corpo, res, req, ip }) => {
   const ok = confereSenha(String(corpo.senha || ''), u?.senha_hash);
   if (!u || !ok) { auditar('login_falhou', { u: u?.id, ip, detalhe: email }); throw new Erro(401, 'E-mail ou senha incorretos.'); }
   baldes.delete(`login-conta:${email}`);
-  if (!u.email_confirmado) throw new Erro(403, 'Confirme seu e-mail para entrar. Procure o link que enviamos (veja também o spam).', 'confirmar_email');
+  if (CONFIRMAR_EMAIL && !u.email_confirmado) throw new Erro(403, 'Confirme seu e-mail para entrar. Procure o link que enviamos (veja também o spam).', 'confirmar_email');
   // conta com app autenticador: a senha certa só abre um desafio; a sessão vem depois do código
   if (u.totp_ativo) {
     const desafio = crypto.randomBytes(24).toString('base64url');
@@ -464,9 +470,9 @@ rota('PATCH', '/api/eu', { login: true }, ({ u, corpo, ip, req }) => {
       db.prepare('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?').run(u.id, sha(cookies(req)[COOKIE] || ''));
     }
     db.prepare('UPDATE usuarios SET nome = ?, email = ? WHERE id = ?').run(nome, email, u.id);
-    if (email !== u.email) db.prepare('UPDATE usuarios SET email_confirmado = 0 WHERE id = ?').run(u.id);
+    if (email !== u.email && CONFIRMAR_EMAIL) db.prepare('UPDATE usuarios SET email_confirmado = 0 WHERE id = ?').run(u.id);
   });
-  if (email !== u.email) enviarConfirmacao(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u.id), req);
+  if (email !== u.email && CONFIRMAR_EMAIL) enviarConfirmacao(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u.id), req);
   if (sensivel) auditar('perfil_alterado', { u, ip, detalhe: { email: email !== u.email, senha: !!corpo.novaSenha } });
   return { usuario: publico(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(u.id)) };
 });
