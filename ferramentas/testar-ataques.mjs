@@ -239,6 +239,21 @@ try {
     `dificuldade ${injetadas.dificuldade}, inimigos ${injetadas.enemiesPerChunk}, fruta ${injetadas.fruitPercent}%`);
   conferir('código de ativação some depois de ativar', !fs.existsSync(arqAtivacao));
 
+  console.log('--- bônus de boas-vindas (R$ 5 vira R$ 15, 1 vez por conta)');
+  const bo = await novaConta('Bonus');
+  conferir('conta nova vê o bônus disponível', (await bo('GET', '/api/carteira')).j.bonus?.extra === 1000);
+  const d20 = (await bo('POST', '/api/carteira/deposito', { valor: 2000 })).j;
+  conferir('depósito de outro valor não ganha bônus', d20.bonus === 0 && d20.saldo === 2000);
+  const d5 = (await bo('POST', '/api/carteira/deposito', { valor: 500 })).j;
+  conferir('depósito de R$ 5 ganha + R$ 10', d5.bonus === 1000 && d5.saldo === 2000 + 1500, `saldo ${d5.saldo}`);
+  const d5b = (await bo('POST', '/api/carteira/deposito', { valor: 500 })).j;
+  conferir('segundo depósito de R$ 5 não ganha de novo', d5b.bonus === 0 && d5b.saldo === 4000);
+  conferir('bônus some da carteira depois de usado', (await bo('GET', '/api/carteira')).j.bonus === null);
+  const bc = await novaConta('BonusCorrida');
+  const varios = await Promise.all(Array.from({ length: 8 }, () => bc('POST', '/api/carteira/deposito', { valor: 500 })));
+  const ganhos = varios.filter(r => r.j?.bonus === 1000).length;
+  conferir('8 depósitos de R$ 5 ao mesmo tempo: só 1 bônus', ganhos === 1 && (await bc('GET', '/api/carteira')).j.saldo === 8 * 500 + 1000, `${ganhos} bônus`);
+
   console.log('--- fluxo de partidas');
   // posição 1 = muito fácil (0), posição 2 = impossível (100), o resto = regras gerais
   await op('PUT', '/api/admin/regras', { regras: { fluxo: [0, 100] } });

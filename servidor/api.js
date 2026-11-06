@@ -556,8 +556,15 @@ rota('POST', '/api/redefinir', {}, ({ corpo, res, req, ip }) => {
 });
 
 // carteira
+// Bônus de boas-vindas: depositar exatamente R$ 5 dá mais R$ 10 de bônus (R$ 15 no total), uma vez por conta.
+const BONUS = { deposito: 500, extra: 1000 };
+const bonusDisponivel = uid => {
+  const r = db.prepare('SELECT visitante, bonus_deposito FROM usuarios WHERE id = ?').get(uid);
+  return !!r && !r.visitante && !r.bonus_deposito;
+};
 rota('GET', '/api/carteira', { login: true }, ({ u }) => ({
   saldo: saldo(u.id),
+  bonus: bonusDisponivel(u.id) ? BONUS : null,
   movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(u.id),
 }));
 rota('POST', '/api/carteira/deposito', { login: true }, ({ u, corpo }) => {
@@ -566,7 +573,15 @@ rota('POST', '/api/carteira/deposito', { login: true }, ({ u, corpo }) => {
     const v = centavos(corpo.valor);
     if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
     lancar(u.id, 'deposito', v, `Depósito simulado (${corpo.metodo === 'card' ? 'cartão' : 'Pix'})`);
-    return { saldo: saldo(u.id) };
+    // bônus: marca a conta e credita na mesma transação; o UPDATE só muda a linha se o bônus ainda não foi usado,
+    // então dois depósitos ao mesmo tempo não ganham duas vezes
+    let bonus = 0;
+    if (v === BONUS.deposito && !u.visitante && db.prepare('UPDATE usuarios SET bonus_deposito = 1 WHERE id = ? AND bonus_deposito = 0').run(u.id).changes === 1) {
+      bonus = BONUS.extra;
+      lancar(u.id, 'deposito', bonus, 'Bônus de boas-vindas · depositou R$ 5, ganhou + R$ 10');
+      auditar('bonus_deposito', { u, detalhe: { valor: bonus } });
+    }
+    return { saldo: saldo(u.id), bonus };
   });
 });
 // Sacar exige o app autenticador ativo e o código dele (ou de reserva) em cada saque: quem roubar a senha

@@ -71,6 +71,9 @@ input::placeholder { color: #766c87; }
 .amounts { display: flex; gap: 8px; margin: 12px 0; }
 .amounts button { flex: 1; background: #3d2b50; color: #e4d8f0; border: 1px solid #735581; border-radius: 8px; padding: 10px 4px; font-size: 12px; }
 .amounts button:hover { border-color: #ffb84e; }
+.amounts button.bonus { position: relative; border-color: #ffb84e; box-shadow: 0 0 0 1px #ffb84e55 inset; }
+.amounts button em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-style: normal; font-weight: 800; font-size: 9px; letter-spacing: .3px; background: linear-gradient(#ffd166, #ff9f2e); color: #3a1d00; border-radius: 6px; padding: 2px 5px; }
+.bonus-aviso { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #ffb84e66; border-radius: 8px; background: #ffb84e14; color: #ffe2b0; font-size: 12px; }
 .check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; color: #d4cbdf; cursor: pointer; }
 .check input { width: 16px; height: 16px; padding: 0; accent-color: #ffa63b; }
 input[type=date] { color-scheme: dark; }

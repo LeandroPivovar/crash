@@ -9,11 +9,15 @@ await cabecalho({ ativo: 'carteira' });
 const $ = id => document.getElementById(id);
 const brl = c => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c / 100);
 let acao = 'deposito', metodo = 'pix', pendente = 0;
+let bonus = null; // { deposito, extra } enquanto a conta ainda não usou o bônus de boas-vindas
 const erro = $('erro');
 
 const NOMES = { deposito: 'Depósito', saque: 'Saque', entrada: 'Entrada', premio: 'Frutas', estorno: 'Estorno' };
 async function render() {
   const c = await arena.carteira();
+  bonus = c.bonus || null;
+  $('selo-bonus').hidden = $('aviso-bonus').hidden = !bonus;
+  $('rapido-bonus').classList.toggle('bonus', !!bonus);
   $('saldo').textContent = arena.moedas(c.saldo);
   atualizarSaldoTopo(c.saldo);
   $('movimentos').innerHTML = c.movimentos.length
@@ -63,7 +67,10 @@ $('form').addEventListener('submit', e => {
   $('dlg-badge').textContent = `CARTEIRA · ${pix ? 'PIX' : 'CARTÃO'}`;
   $('dlg-titulo').textContent = pix ? 'Depósito via Pix' : 'Depósito com cartão';
   $('dlg-valor').textContent = brl(v);
-  $('dlg-moedas').textContent = `✦ ${arena.moedas(v)} moedas`;
+  const comBonus = bonus && v === bonus.deposito;
+  $('dlg-moedas').textContent = comBonus
+    ? `✦ ${arena.moedas(v + bonus.extra)} moedas (R$ 5 + R$ 10 de bônus)`
+    : `✦ ${arena.moedas(v)} moedas`;
   $('confirmar').showModal();
 });
 document.querySelectorAll('[data-fechar-saque]').forEach(b => b.addEventListener('click', () => $('dlg-saque').close()));
@@ -85,10 +92,10 @@ $('saque-ok').addEventListener('click', e => ocupado(e.currentTarget, async () =
 document.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => $('confirmar').close()));
 $('dlg-ok').addEventListener('click', e => ocupado(e.currentTarget, async () => {
   try {
-    if (pendente > 0) await arena.depositar(pendente, metodo);
+    const r = pendente > 0 ? await arena.depositar(pendente, metodo) : {};
     pendente = 0;
     $('confirmar').close();
-    toast('Depósito simulado concluído.');
+    toast(r.bonus ? `Depósito concluído + bônus de ${brl(r.bonus)}! 🎁` : 'Depósito simulado concluído.');
     await render();
   } catch (err) { $('confirmar').close(); erro.textContent = err.message; }
 }));

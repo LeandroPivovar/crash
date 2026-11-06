@@ -89,6 +89,8 @@ for (const sql of [
   'ALTER TABLE sessoes ADD COLUMN dois_fatores INTEGER NOT NULL DEFAULT 0',  // sessão aberta com o segundo fator
   // Confirmação do e-mail: contas que já existiam contam como confirmadas; o cadastro grava 0.
   'ALTER TABLE usuarios ADD COLUMN email_confirmado INTEGER NOT NULL DEFAULT 1',
+  // bônus de boas-vindas (depositar R$ 5 e ganhar + R$ 10) já usado: 1 vez por conta
+  'ALTER TABLE usuarios ADD COLUMN bonus_deposito INTEGER NOT NULL DEFAULT 0',
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
 db.exec(`
 CREATE TABLE IF NOT EXISTS confirmacoes (

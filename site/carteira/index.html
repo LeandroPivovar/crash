@@ -36,8 +36,9 @@
       <label for="valor">VALOR SIMULADO EM R$</label>
       <div class="field"><span>R$</span><input id="valor" inputmode="decimal" autocomplete="off" value="20"></div>
       <div class="amounts" id="rapidos">
-        <button type="button" data-v="20">R$ 20</button><button type="button" data-v="50">R$ 50</button><button type="button" data-v="100">R$ 100</button>
+        <button type="button" data-v="5" id="rapido-bonus">R$ 5<em id="selo-bonus" hidden>+ R$ 10 GRÁTIS</em></button><button type="button" data-v="20">R$ 20</button><button type="button" data-v="50">R$ 50</button><button type="button" data-v="100">R$ 100</button>
       </div>
+      <p class="bonus-aviso" id="aviso-bonus" hidden>🎁 <b>Bônus de boas-vindas:</b> deposite R$ 5 e ganhe + R$ 10 — fica com R$ 15 em moedas. Vale 1 vez por conta.</p>
       <p class="note">✦ &nbsp; R$ 1 = 1 moeda<br>Simulação: nenhum dinheiro será movimentado.</p>
       <p class="erro" id="erro" role="alert"></p>
       <button class="primary" id="enviar">CONTINUAR COM PIX ➜</button>
