@@ -114,6 +114,15 @@
   .tut-gesto.esq span { animation: tutEsq 1.1s ease-in-out infinite; }
   .tut-gesto.cima span { animation: tutCima 1.1s ease-in-out infinite; }
   .tut-gesto b { display: inline-block; margin-top: 4px; font: 800 13px Inter, system-ui, sans-serif; color: #ffb84a; background: #00000055; border-radius: 6px; padding: 3px 8px; }
+  .tut-gesto.teclas { height: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 4px; }
+  .tut-kbds { display: flex; gap: 8px; align-items: center; }
+  .tut-gesto kbd { min-width: 46px; height: 46px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px;
+    background: linear-gradient(#fff6e6, #e9d7b8); color: #2a1600; font: 800 22px Inter, system-ui, sans-serif; border-bottom: 4px solid #a8865a;
+    box-shadow: 0 4px 10px #0007; animation: tutTecla 1s ease-in-out infinite; }
+  .tut-gesto kbd.larga { min-width: 120px; font-size: 16px; letter-spacing: 1px; }
+  .tut-gesto kbd + kbd { animation-delay: .33s; }
+  .tut-gesto kbd + kbd + kbd { animation-delay: .66s; }
+  @keyframes tutTecla { 0%, 60%, 100% { transform: translateY(0); border-bottom-width: 4px; } 30% { transform: translateY(3px); border-bottom-width: 1px; } }
   .tut-dica { margin-top: 12vh; background: rgba(16,11,32,.82); border: 1px solid #ffffff2a; border-radius: 14px; padding: 9px 16px; font: 700 14px Inter, system-ui, sans-serif; }
   .tut-dica[hidden] { display: none; }
   .tut-boa { margin-top: 18vh; font: 800 54px "Barlow Condensed", Impact, sans-serif; color: #ffc34f; text-shadow: 0 4px 0 #7a3b00, 0 8px 20px #000; animation: tutBoa .9s ease-out forwards; }
@@ -1454,7 +1463,20 @@ const progressoTimer = setInterval(enviarProgresso, 2000);
 // a fruta); se morrer, renasce um pouco antes e a lição volta. Terminando as três, vai para o lobby jogar de verdade.
 const tutorial = TUTORIAL ? (() => {
   const $t = id => document.getElementById(id);
-  const toque = () => document.body.classList.contains('toque');
+  // Dispositivo: celular/tablet (gestos) ou computador (teclado). Começa pelo que o aparelho tem e troca na hora
+  // se a pessoa tocar na tela ou usar o teclado; o cartão aberto é redesenhado com o comando certo.
+  const detectar = () => (matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !matchMedia('(hover: hover)').matches)) ? 'toque' : 'teclado';
+  let modo = detectar();
+  if (modo === 'toque') document.body.classList.add('toque');
+  const toque = () => modo === 'toque';
+  function trocarModo(m) {
+    if (m === modo) return;
+    modo = m;
+    document.body.classList.toggle('toque', m === 'toque');
+    redesenhar();
+  }
+  addEventListener('pointerdown', e => { if (e.pointerType === 'touch') trocarModo('toque'); }, { capture: true });
+  addEventListener('keydown', e => { if (['Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'KeyA', 'KeyD', 'Enter'].includes(e.code)) trocarModo('teclado'); }, { capture: true });
   const LICOES = ['pulo', 'bloco', 'fruta', 'desvio'];
   // Bloco de pedra da fase original, sempre no mesmo lugar no começo da corrida: passa indo pela direita
   // (pela esquerda trava; medido com a simulação). Avisa um pouco antes e conta depois que passou.
@@ -1464,12 +1486,27 @@ const tutorial = TUTORIAL ? (() => {
   let seguindo = null;     // lição em andamento depois do gesto: { licao, alvo, zFim }
   let fim = false, comecou = false, paradoDesde = 0, zAntes = 0;
   $t('tut').hidden = false;
-  function cartao(titulo, texto, { gesto = null, tecla = '', botao = null } = {}) {
+  // comando de cada lição: no celular, a mãozinha e o gesto; no computador, as teclas
+  const COMANDOS = {
+    pulo: { gesto: 'cima', toque: 'arraste para cima', teclas: ['ESPAÇO'], teclado: 'aperte' },
+    dir: { gesto: 'dir', toque: 'arraste para a direita', teclas: ['→'], teclado: 'segure' },
+    esq: { gesto: 'esq', toque: 'arraste para a esquerda', teclas: ['←'], teclado: 'segure' },
+    desvio: { gesto: 'dir', toque: 'arraste para o lado ou para cima', teclas: ['←', '→', 'ESPAÇO'], teclado: 'desvie ou pule' },
+  };
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function cartao(titulo, texto, { comando = null, botao = null } = {}) {
     $t('tut-cartao').hidden = false;
     $t('tut-titulo').textContent = titulo;
     $t('tut-texto').textContent = texto;
-    $t('tut-gesto').hidden = !gesto;
-    if (gesto) { $t('tut-gesto').className = `tut-gesto ${gesto}`; $t('tut-tecla').textContent = tecla; }
+    const g = $t('tut-gesto');
+    g.hidden = !comando;
+    if (comando) {
+      const c = COMANDOS[comando];
+      g.className = toque() ? `tut-gesto ${c.gesto}` : 'tut-gesto teclas';
+      g.innerHTML = toque()
+        ? `<span>👆</span><b>${esc(c.toque)}</b>`
+        : `<div class="tut-kbds">${c.teclas.map(k => `<kbd class="${k.length > 1 ? 'larga' : ''}">${esc(k)}</kbd>`).join(c.teclas.length > 2 ? ' ' : '')}</div><b>${esc(c.teclado)}</b>`;
+    }
     $t('tut-botao').hidden = !botao;
     if (botao) $t('tut-botao').textContent = botao;
   }
@@ -1484,17 +1521,21 @@ const tutorial = TUTORIAL ? (() => {
     boa();
     if (feitas.size === LICOES.length && !fim) { fim = true; setTimeout(final, 1300); }
   }
+  function mostrarLicao() {
+    const { licao, lado } = pausa;
+    if (licao === 'pulo') cartao('PULE O BURACO!', 'Tem um buraco logo à frente.', { comando: 'pulo' });
+    if (licao === 'fruta') {
+      const d = lado > 0;
+      cartao('PEGUE A FRUTA!', `Cada fruta vale moedas. Vá para a ${d ? 'direita' : 'esquerda'} para pegar.`, { comando: d ? 'dir' : 'esq' });
+    }
+    if (licao === 'bloco') cartao('DESVIE DO BLOCO!', 'Tem um bloco de pedra no caminho. Passe pela direita.', { comando: 'dir' });
+    if (licao === 'desvio') cartao('CUIDADO COM O CARANGUEJO!', 'Desvie para o lado ou pule por cima dele.', { comando: 'desvio' });
+  }
   function pausar(licao, extra) {
     pausa = { licao, ...extra };
     player.frozen = true;
     jumpPressed = false;
-    if (licao === 'pulo') cartao('PULE O BURACO!', 'Tem um buraco logo à frente.', { gesto: 'cima', tecla: toque() ? 'arraste para cima' : 'aperte ESPAÇO' });
-    if (licao === 'fruta') {
-      const d = extra.lado > 0;
-      cartao('PEGUE A FRUTA!', `Cada fruta vale moedas. Vá para a ${d ? 'direita' : 'esquerda'} para pegar.`, { gesto: d ? 'dir' : 'esq', tecla: toque() ? `arraste para a ${d ? 'direita' : 'esquerda'}` : `segure ${d ? '→' : '←'}` });
-    }
-    if (licao === 'bloco') cartao('DESVIE DO BLOCO!', 'Tem um bloco de pedra no caminho. Passe pela direita.', { gesto: 'dir', tecla: toque() ? 'arraste para a direita' : 'segure →' });
-    if (licao === 'desvio') cartao('CUIDADO COM O CARANGUEJO!', 'Desvie para o lado ou pule por cima dele.', { gesto: 'cima', tecla: toque() ? 'arraste para o lado ou para cima' : '← → ou ESPAÇO' });
+    mostrarLicao();
   }
   function retomar() {
     seguindo = { ...pausa };
@@ -1502,9 +1543,20 @@ const tutorial = TUTORIAL ? (() => {
     esconder();
     player.frozen = false;
   }
+  const boasVindas = () => cartao('BEM-VINDO À ARENA!', toque()
+    ? 'Antes da primeira partida, um treino rápido (sem valer moedas). No celular é tudo no dedo: arraste para os lados para desviar e para cima para pular.'
+    : 'Antes da primeira partida, um treino rápido (sem valer moedas). Use as setas ← → para desviar e ESPAÇO para pular.', { botao: 'COMEÇAR O TREINO ➜' });
   function final() {
     player.frozen = true;
     cartao('MANDOU BEM! 🎉', 'Você já sabe pular, desviar dos obstáculos e pegar frutas. Agora é pra valer: cada fruta coletada devolve moedas para a sua carteira.', { botao: 'JOGAR DE VERDADE ➜' });
+  }
+  // trocou de aparelho/controle com um cartão aberto: mostra de novo com o comando certo
+  function redesenhar() {
+    if (!comecou) boasVindas();
+    else if (pausa) mostrarLicao();
+    else if (fim && !$t('tut-cartao').hidden) final();
+    const d = $t('tut-dica');
+    if (!d.hidden && !d.textContent.startsWith('Quase')) d.hidden = true; // a próxima dica já sai no formato novo
   }
   async function sair(pulou) {
     $t('tut-botao').disabled = true;
@@ -1519,7 +1571,7 @@ const tutorial = TUTORIAL ? (() => {
   $t('tut-pular').addEventListener('click', e => { e.stopPropagation(); sair(true); });
   // boas-vindas: o jogo começa parado
   player.frozen = true;
-  cartao('BEM-VINDO À ARENA!', 'Antes da primeira partida, um treino rápido (sem valer moedas): pular, desviar e pegar frutas.', { botao: 'COMEÇAR O TREINO ➜' });
+  boasVindas();
 
   // distância até o próximo buraco à frente (ou null)
   const buracoAFrente = (ate = 700) => {
