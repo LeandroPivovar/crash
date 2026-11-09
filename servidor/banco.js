@@ -92,20 +92,62 @@ for (const sql of [
   // bônus de boas-vindas (depositar R$ 5 e ganhar + R$ 10) já usado: 1 vez por conta
   'ALTER TABLE usuarios ADD COLUMN bonus_deposito INTEGER NOT NULL DEFAULT 0',
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
-db.exec(`
--- Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado = lançamento 'estorno' devolve.
-CREATE TABLE IF NOT EXISTS saques (
+// Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado ou falha no envio = lançamento
+// 'estorno' devolve. processando = aprovado e enviado ao gateway, esperando a confirmação do Pix.
+const SAQUES_SQL = `CREATE TABLE saques (
   id          INTEGER PRIMARY KEY,
   usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),
   valor       INTEGER NOT NULL CHECK (valor > 0),
-  estado      TEXT NOT NULL CHECK (estado IN ('pendente','aprovado','recusado')),
+  estado      TEXT NOT NULL CHECK (estado IN ('pendente','processando','aprovado','recusado','falhou')),
   criado      INTEGER NOT NULL,
   decidido    INTEGER,
   operador_id INTEGER,
-  motivo      TEXT
-);
+  motivo      TEXT,
+  chave_tipo  TEXT,                     -- cpf | telefone
+  chave       TEXT,                     -- só dígitos (telefone com DDD, sem +55)
+  documento   TEXT,                     -- CPF do titular da chave
+  gateway_id  TEXT                      -- id do saque na CajuPay (envio automático)
+)`;
+const saquesAtual = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'saques'").get();
+if (!saquesAtual) db.exec(SAQUES_SQL);
+else if (!saquesAtual.sql.includes('processando')) {
+  // versão anterior (sem chave Pix nem os estados novos): recria a tabela com os mesmos pedidos
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.exec('ALTER TABLE saques RENAME TO saques_antigo');
+    db.exec(SAQUES_SQL);
+    db.exec('INSERT INTO saques (id, usuario_id, valor, estado, criado, decidido, operador_id, motivo) SELECT id, usuario_id, valor, estado, criado, decidido, operador_id, motivo FROM saques_antigo');
+    db.exec('DROP TABLE saques_antigo');
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
+}
+db.exec(`
 CREATE INDEX IF NOT EXISTS saques_estado ON saques(estado, criado);
 CREATE INDEX IF NOT EXISTS saques_usuario ON saques(usuario_id, id);
+-- Depósitos por Pix (CajuPay): o saldo só entra quando o pagamento é confirmado (webhook ou consulta).
+CREATE TABLE IF NOT EXISTS depositos (
+  id          INTEGER PRIMARY KEY,
+  usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),
+  valor       INTEGER NOT NULL CHECK (valor > 0),
+  estado      TEXT NOT NULL CHECK (estado IN ('pendente','pago','expirado','falhou')),
+  gateway     TEXT NOT NULL,            -- cajupay | simulado
+  gateway_id  TEXT UNIQUE,              -- payment_id da CajuPay
+  pix_copia_cola TEXT,
+  pix_qr      TEXT,
+  criado      INTEGER NOT NULL,
+  pago        INTEGER,
+  bonus       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS depositos_usuario ON depositos(usuario_id, id);
+CREATE INDEX IF NOT EXISTS depositos_estado ON depositos(estado, criado);
+-- Promoções de depósito já usadas (cada uma vale 1 vez por conta): valor do depósito que deu o bônus.
+CREATE TABLE IF NOT EXISTS bonus_usados (
+  usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),
+  deposito    INTEGER NOT NULL,
+  criado      INTEGER NOT NULL,
+  PRIMARY KEY (usuario_id, deposito)
+);
+INSERT OR IGNORE INTO bonus_usados (usuario_id, deposito, criado) SELECT id, 500, criado FROM usuarios WHERE bonus_deposito = 1;
 CREATE TABLE IF NOT EXISTS confirmacoes (
   token_hash  TEXT PRIMARY KEY,
   usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,

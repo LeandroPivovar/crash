@@ -47,6 +47,8 @@
   .paginacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; color: var(--muted); }
   .paginacao div { display: flex; gap: 6px; align-items: center; }
   .vazio { color: var(--muted); padding: 18px; text-align: center; }
+  .modo { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 14px; }
+  .chave { font-family: ui-monospace, Consolas, monospace; user-select: all; }
   #status { min-height: 20px; margin-bottom: 8px; color: var(--ok); }
   #status.err { color: var(--bad); }
 </style>
@@ -60,13 +62,16 @@
   <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador, entrando com o código do app autenticador, vê os saques.</p><a href="../configuracoes/" style="color:var(--accent)">Ir para as configurações</a></section>
 
   <div id="painel" hidden>
+    <p class="modo" id="modo"></p>
     <div class="cards" id="resumo"></div>
     <section>
       <div class="filtros">
         <div class="abas" role="tablist">
           <button type="button" role="tab" data-estado="pendente" aria-selected="true">Pendentes</button>
           <button type="button" role="tab" data-estado="aprovado" aria-selected="false">Aprovados</button>
+          <button type="button" role="tab" data-estado="processando" aria-selected="false">Enviando</button>
           <button type="button" role="tab" data-estado="recusado" aria-selected="false">Recusados</button>
+          <button type="button" role="tab" data-estado="falhou" aria-selected="false">Falharam</button>
           <button type="button" role="tab" data-estado="" aria-selected="false">Todos</button>
         </div>
         <input type="search" id="busca" placeholder="Buscar por nome, e-mail ou #ID do jogador" aria-label="Buscar saque" autocomplete="off">
@@ -75,7 +80,7 @@
       <div id="status" role="status"></div>
       <div class="tabela">
         <table id="lista">
-          <thead><tr><th>#</th><th>Jogador</th><th>E-mail</th><th class="n">Valor</th><th>Pedido em</th><th>Estado</th><th class="n">Saldo atual</th><th>Ações / decisão</th></tr></thead>
+          <thead><tr><th>#</th><th>Jogador</th><th>E-mail</th><th class="n">Valor</th><th>Chave Pix</th><th>Pedido em</th><th>Estado</th><th class="n">Saldo atual</th><th>Ações / decisão</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -93,7 +98,8 @@ const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const data = t => (t ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(t)) : '—');
 const brl = c => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c / 100);
-const ROTULO = { pendente: 'Pendente', aprovado: 'Aprovado (pago)', recusado: 'Recusado (devolvido)' };
+const ROTULO = { pendente: 'Pendente', processando: 'Enviando Pix', aprovado: 'Aprovado (pago)', recusado: 'Recusado (devolvido)', falhou: 'Falhou (devolvido)' };
+let envioAuto = false;
 
 const local = await arena.adminLocal();
 const { usuario } = await arena.sessao().catch(() => ({}));
@@ -113,6 +119,10 @@ async function carregar() {
     const r = await arena.saquesAdmin(estado);
     if (n !== pedido) return;
     estado.pagina = r.pagina;
+    envioAuto = !!r.envioAutomatico;
+    $('modo').innerHTML = envioAuto
+      ? '⚡ <b>Envio automático ligado:</b> aprovar manda o Pix pela CajuPay para a chave do jogador. Se o banco recusar, o valor volta para o saldo dele.'
+      : '✋ <b>Pagamento manual:</b> faça o Pix para a chave mostrada e depois clique em <b>Aprovar (dar baixa)</b>.';
     const s = r.resumo;
     $('resumo').innerHTML =
       `<div class="card destaque"><small>Pendentes</small><b>${s.pendente.quantidade}</b><small>${brl(s.pendente.valor)} esperando</small></div>` +
@@ -123,17 +133,18 @@ async function carregar() {
       <td><a href="../usuarios/#u=${x.usuario.id}">${esc(x.usuario.nome)}</a> <span class="mut">#${x.usuario.id}</span></td>
       <td>${esc(x.usuario.email) || '<span class="mut">—</span>'}</td>
       <td class="n valor">${brl(x.valor)}</td>
+      <td>${x.chave ? `<b class="chave">${x.chaveTipo === 'telefone' ? 'Tel ' : 'CPF '}${esc(x.chave)}</b>${x.chaveTipo === 'telefone' && x.documento ? `<br><span class="mut">titular CPF ${esc(x.documento)}</span>` : ''}` : '<span class="mut">— (pedido antigo)</span>'}</td>
       <td>${data(x.criado)}</td>
       <td><span class="tag ${x.estado}">${ROTULO[x.estado]}</span></td>
       <td class="n">${brl(x.saldoAtual)}</td>
       <td>${x.estado === 'pendente'
-        ? '<div class="acoes"><button type="button" class="ok" data-decisao="aprovar">Aprovar (dar baixa)</button><button type="button" class="nao" data-decisao="recusar">Recusar (devolver)</button></div>'
+        ? `<div class="acoes"><button type="button" class="ok" data-decisao="aprovar">${envioAuto ? 'Aprovar e enviar Pix' : 'Aprovar (dar baixa)'}</button><button type="button" class="nao" data-decisao="recusar">Recusar (devolver)</button></div>`
         : `<span class="mut">${data(x.decidido)}${x.motivo ? ` · ${esc(x.motivo)}` : ''}</span>`}</td></tr>`).join('')
-      : `<tr><td colspan="8" class="vazio">${estado.estado === 'pendente' ? 'Nenhum saque esperando aprovação.' : 'Nenhum saque encontrado.'}</td></tr>`;
+      : `<tr><td colspan="9" class="vazio">${estado.estado === 'pendente' ? 'Nenhum saque esperando aprovação.' : 'Nenhum saque encontrado.'}</td></tr>`;
     $('contagem').textContent = r.total ? `${(r.pagina - 1) * r.por + 1}–${Math.min(r.total, r.pagina * r.por)} de ${r.total}` : '';
     $('pag').textContent = `Página ${r.pagina} de ${r.paginas}`;
     $('ant').disabled = r.pagina <= 1; $('prox').disabled = r.pagina >= r.paginas;
-  } catch (err) { tb.innerHTML = `<tr><td colspan="8" class="vazio">${esc(err.message)}</td></tr>`; }
+  } catch (err) { tb.innerHTML = `<tr><td colspan="9" class="vazio">${esc(err.message)}</td></tr>`; }
 }
 
 $('lista').addEventListener('click', async e => {
@@ -143,7 +154,10 @@ $('lista').addEventListener('click', async e => {
   const nome = tr.children[1].textContent.trim(), valor = tr.querySelector('.valor').textContent;
   let motivo = '';
   if (b.dataset.decisao === 'aprovar') {
-    if (!confirm(`Aprovar o saque de ${valor} para ${nome}?\n\nConfirme só depois de enviar o pagamento. O saque fica como pago.`)) return;
+    const chave = tr.querySelector('.chave')?.textContent || 'sem chave';
+    if (!confirm(envioAuto
+      ? `Enviar ${valor} por Pix para ${nome} (${chave})?\n\nA CajuPay transfere agora.`
+      : `Aprovar o saque de ${valor} para ${nome} (${chave})?\n\nConfirme só depois de fazer o Pix. O saque fica como pago.`)) return;
   } else {
     motivo = prompt(`Recusar o saque de ${valor} para ${nome}?\nO valor volta para o saldo do jogador.\n\nMotivo (opcional, aparece no extrato dele):`, '');
     if (motivo === null) return;

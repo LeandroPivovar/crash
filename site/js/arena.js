@@ -60,8 +60,10 @@ export async function exigirLogin(raiz = '../') {
 // ---------- carteira ----------
 export const LIMITE_MOVIMENTO = 10000 * 100;
 export const carteira = () => api('GET', '/carteira');                     // { saldo, movimentos }
-export const depositar = (valor, metodo) => api('POST', '/carteira/deposito', { valor, metodo });
-export const sacar = (valor, codigo) => api('POST', '/carteira/saque', { valor, codigo });
+export const depositar = valor => api('POST', '/carteira/deposito', { valor });
+export const consultarDeposito = id => api('GET', `/carteira/deposito/${Number(id)}`);
+// pix: { chaveTipo: 'cpf' | 'telefone', chave, documento } (CPF do titular, se a chave for telefone)
+export const sacar = (valor, codigo, pix = {}) => api('POST', '/carteira/saque', { valor, codigo, chaveTipo: pix.chaveTipo, chave: pix.chave, documento: pix.documento });
 
 // ---------- regras ----------
 export const regras = async () => normalize((await api('GET', '/regras')).regras);

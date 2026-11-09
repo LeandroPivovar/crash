@@ -42,6 +42,15 @@ function enviar(res, status, obj, extra = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(corpo), ...extra });
   res.end(corpo);
 }
+// Corpo cru (webhook: a assinatura é conferida sobre os bytes exatos que chegaram).
+function lerCru(req, max) {
+  return new Promise((ok, falha) => {
+    let tam = 0; const partes = [];
+    req.on('data', c => { tam += c.length; if (tam > max) { falha(new Erro(413, 'Pedido grande demais.')); req.destroy(); } else partes.push(c); });
+    req.on('end', () => ok(Buffer.concat(partes)));
+    req.on('error', falha);
+  });
+}
 function lerCorpo(req, max) {
   return new Promise((ok, falha) => {
     const declarado = Number(req.headers['content-length'] || 0);
@@ -560,41 +569,142 @@ rota('POST', '/api/redefinir', {}, ({ corpo, res, req, ip }) => {
 });
 
 // carteira
-// Bônus de boas-vindas: depositar exatamente R$ 5 dá mais R$ 10 de bônus (R$ 15 no total), uma vez por conta.
-const BONUS = { deposito: 500, extra: 1000 };
-const bonusDisponivel = uid => {
-  const r = db.prepare('SELECT visitante, bonus_deposito FROM usuarios WHERE id = ?').get(uid);
-  return !!r && !r.visitante && !r.bonus_deposito;
+// Depósito: só estes valores (centavos). Promoções de 1ª vez por conta: depositar R$ 5 → fica com R$ 15;
+// depositar R$ 25 → fica com R$ 100. O bônus entra junto com o depósito, quando o Pix é confirmado.
+const VALORES_DEPOSITO = [500, 1000, 2500, 5000];
+const PROMOCOES = { 500: 1000, 2500: 7500 }; // depósito → bônus
+const caju = require('./cajupay');
+const moedasBrl = c => `R$ ${moedas(c).replace(/,00$/, '')}`;
+const promocoesDisponiveis = uid => {
+  const u = db.prepare('SELECT visitante FROM usuarios WHERE id = ?').get(uid);
+  if (!u || u.visitante) return [];
+  const usadas = new Set(db.prepare('SELECT deposito FROM bonus_usados WHERE usuario_id = ?').all(uid).map(r => r.deposito));
+  return Object.entries(PROMOCOES).filter(([d]) => !usadas.has(Number(d))).map(([d, b]) => ({ deposito: Number(d), bonus: b, total: Number(d) + b }));
 };
+// Regra de saque: só depois de ter jogado (entradas de partidas, sem as estornadas) tudo o que entrou na carteira
+// por depósito, bônus incluído. Ex.: depositou R$ 5 sem bônus → precisa ter jogado R$ 5.
+function rodada(uid) {
+  const r = db.prepare(`SELECT
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'deposito'), 0) AS depositado,
+      COALESCE((SELECT -SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'entrada'), 0)
+        - COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'estorno' AND partida_id IS NOT NULL), 0) AS jogado`).get(uid, uid, uid);
+  return { depositado: r.depositado, jogado: r.jogado, falta: Math.max(0, r.depositado - r.jogado) };
+}
+const depositoPublico = d => d && ({
+  id: d.id, valor: d.valor, estado: d.estado, bonus: d.bonus, criado: d.criado, pago: d.pago, gateway: d.gateway,
+  ...(d.estado === 'pendente' ? { pixCopiaCola: d.pix_copia_cola || '', pixQr: d.pix_qr || '' } : {}),
+});
+// Credita um depósito pago (uma vez só: o UPDATE só pega o pendente) e aplica a promoção se for a 1ª vez.
+function creditarDeposito(id, origem) {
+  return transacao(() => {
+    const d = db.prepare('SELECT * FROM depositos WHERE id = ?').get(id);
+    if (!d || db.prepare("UPDATE depositos SET estado = 'pago', pago = ? WHERE id = ? AND estado = 'pendente'").run(agora(), id).changes !== 1) return false;
+    lancar(d.usuario_id, 'deposito', d.valor, d.gateway === 'simulado' ? 'Depósito simulado (Pix)' : `Depósito Pix #${d.id}`);
+    const bonus = PROMOCOES[d.valor];
+    if (bonus && !db.prepare('SELECT visitante FROM usuarios WHERE id = ?').get(d.usuario_id).visitante
+      && db.prepare('INSERT OR IGNORE INTO bonus_usados (usuario_id, deposito, criado) VALUES (?, ?, ?)').run(d.usuario_id, d.valor, agora()).changes === 1) {
+      lancar(d.usuario_id, 'deposito', bonus, `Bônus de boas-vindas · depositou ${moedasBrl(d.valor)}, ficou com ${moedasBrl(d.valor + bonus)}`);
+      db.prepare('UPDATE depositos SET bonus = ? WHERE id = ?').run(bonus, id);
+      if (d.valor === 500) db.prepare('UPDATE usuarios SET bonus_deposito = 1 WHERE id = ?').run(d.usuario_id);
+      auditar('bonus_deposito', { u: d.usuario_id, detalhe: { deposito: d.valor, bonus } });
+    }
+    auditar('deposito_pago', { u: d.usuario_id, detalhe: { deposito: d.id, valor: d.valor, origem } });
+    return true;
+  });
+}
+// Confere na CajuPay se um depósito pendente foi pago (fallback do webhook).
+async function conferirDeposito(d) {
+  if (!d || d.estado !== 'pendente' || d.gateway !== 'cajupay' || !d.gateway_id) return false;
+  const p = await caju.consultarPagamento(d.gateway_id);
+  if (p && p.status === 'paid' && Number(p.amount_cents) === d.valor) return creditarDeposito(d.id, 'consulta');
+  if (p && ['failed', 'cancelled', 'canceled', 'expired', 'refunded'].includes(p.status)) {
+    db.prepare("UPDATE depositos SET estado = ? WHERE id = ? AND estado = 'pendente'").run(p.status === 'expired' ? 'expirado' : 'falhou', d.id);
+  }
+  return false;
+}
 rota('GET', '/api/carteira', { login: true }, ({ u }) => ({
   saldo: saldo(u.id),
-  bonus: bonusDisponivel(u.id) ? BONUS : null,
+  valoresDeposito: VALORES_DEPOSITO,
+  promocoes: promocoesDisponiveis(u.id),
+  rodada: rodada(u.id),
+  pixReal: caju.configurado(),
   saques: db.prepare('SELECT * FROM saques WHERE usuario_id = ? ORDER BY id DESC LIMIT 50').all(u.id).map(saquePublico),
+  depositos: db.prepare('SELECT * FROM depositos WHERE usuario_id = ? ORDER BY id DESC LIMIT 20').all(u.id).map(depositoPublico),
   movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(u.id),
 }));
-rota('POST', '/api/carteira/deposito', { login: true }, ({ u, corpo }) => {
+// Pede um depósito: com a CajuPay configurada, gera o Pix (QR + copia e cola) e o saldo entra quando o pagamento
+// for confirmado; sem ela (testes no computador), o depósito simulado entra na hora.
+rota('POST', '/api/carteira/deposito', { login: true }, async ({ u, corpo, ip }) => {
   limitar(`carteira:${u.id}`, 20, 60e3);
-  return transacao(() => {
-    const v = centavos(corpo.valor);
-    if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
-    lancar(u.id, 'deposito', v, `Depósito simulado (${corpo.metodo === 'card' ? 'cartão' : 'Pix'})`);
-    // bônus: marca a conta e credita na mesma transação; o UPDATE só muda a linha se o bônus ainda não foi usado,
-    // então dois depósitos ao mesmo tempo não ganham duas vezes
-    let bonus = 0;
-    if (v === BONUS.deposito && !u.visitante && db.prepare('UPDATE usuarios SET bonus_deposito = 1 WHERE id = ? AND bonus_deposito = 0').run(u.id).changes === 1) {
-      bonus = BONUS.extra;
-      lancar(u.id, 'deposito', bonus, 'Bônus de boas-vindas · depositou R$ 5, ganhou + R$ 10');
-      auditar('bonus_deposito', { u, detalhe: { valor: bonus } });
-    }
-    return { saldo: saldo(u.id), bonus };
-  });
+  const v = centavos(corpo.valor);
+  if (!VALORES_DEPOSITO.includes(v)) throw new Erro(400, 'Escolha um dos valores: R$ 5, R$ 10, R$ 25 ou R$ 50.');
+  if (!caju.configurado()) {
+    const id = Number(db.prepare("INSERT INTO depositos (usuario_id, valor, estado, gateway, criado) VALUES (?, ?, 'pendente', 'simulado', ?)").run(u.id, v, agora()).lastInsertRowid);
+    creditarDeposito(id, 'simulado');
+    const d = db.prepare('SELECT * FROM depositos WHERE id = ?').get(id);
+    return { deposito: depositoPublico(d), saldo: saldo(u.id), bonus: d.bonus };
+  }
+  // no máximo 3 Pix esperando pagamento por conta (cada um vale até ser pago ou vencer)
+  if (db.prepare("SELECT COUNT(*) AS n FROM depositos WHERE usuario_id = ? AND estado = 'pendente' AND criado > ?").get(u.id, agora() - 12 * 3600e3).n >= 3) {
+    throw new Erro(429, 'Você já tem Pix esperando pagamento. Pague um deles ou espere alguns minutos.');
+  }
+  const id = Number(db.prepare("INSERT INTO depositos (usuario_id, valor, estado, gateway, criado) VALUES (?, ?, 'pendente', 'cajupay', ?)").run(u.id, v, agora()).lastInsertRowid);
+  let p;
+  try {
+    p = await caju.criarPix({ valor: v, depositoId: id, usuario: u, urlCheckout: SITE_URL ? `${SITE_URL}/carteira/` : '' });
+  } catch (e) {
+    db.prepare("UPDATE depositos SET estado = 'falhou' WHERE id = ?").run(id);
+    auditar('deposito_gateway_erro', { u, ip, detalhe: String(e.message).slice(0, 300) });
+    throw new Erro(502, 'Não foi possível gerar o Pix agora. Tente de novo em instantes.');
+  }
+  db.prepare('UPDATE depositos SET gateway_id = ?, pix_copia_cola = ?, pix_qr = ? WHERE id = ?')
+    .run(String(p.payment_id), String(p.pix_copy_paste || ''), String(p.pix_qr_code || '').slice(0, 200000), id);
+  auditar('deposito_pix_gerado', { u, ip, detalhe: { deposito: id, valor: v } });
+  return { deposito: depositoPublico(db.prepare('SELECT * FROM depositos WHERE id = ?').get(id)) };
 });
+// A página do QR pergunta se o Pix já foi pago (e o servidor confere na CajuPay, no máximo a cada 5 s).
+rota('GET', '/api/carteira/deposito/(\\d{1,12})', { login: true }, async ({ u, m }) => {
+  let d = db.prepare('SELECT * FROM depositos WHERE id = ? AND usuario_id = ?').get(Number(m[1]), u.id);
+  if (!d) throw new Erro(404, 'Depósito não encontrado.');
+  if (d.estado === 'pendente' && d.gateway === 'cajupay') {
+    try { limitar(`deposito-consulta:${d.id}`, 1, 5e3); await conferirDeposito(d); } catch (e) { if (!(e instanceof Erro)) console.error('[cajupay]', e.message); }
+    d = db.prepare('SELECT * FROM depositos WHERE id = ?').get(d.id);
+  }
+  return { deposito: depositoPublico(d), saldo: saldo(u.id) };
+});
+// Chave Pix do saque: CPF (11 dígitos, com dígitos verificadores certos) ou telefone celular com DDD.
+function cpfValido(c) {
+  if (!/^\d{11}$/.test(c) || /^(\d)\1{10}$/.test(c)) return false;
+  for (const n of [9, 10]) {
+    let s = 0;
+    for (let i = 0; i < n; i++) s += Number(c[i]) * (n + 1 - i);
+    if (((s * 10) % 11) % 10 !== Number(c[n])) return false;
+  }
+  return true;
+}
+function chavePix(corpo) {
+  const tipo = corpo.chaveTipo === 'telefone' ? 'telefone' : corpo.chaveTipo === 'cpf' ? 'cpf' : null;
+  if (!tipo) throw new Erro(400, 'Escolha a chave Pix: CPF ou telefone.');
+  let chave = String(corpo.chave || '').replace(/\D/g, '');
+  const documento = String(corpo.documento || '').replace(/\D/g, '');
+  if (tipo === 'cpf') {
+    if (!cpfValido(chave)) throw new Erro(400, 'CPF inválido. Confira os números.');
+    return { tipo, chave, documento: chave };
+  }
+  if (chave.length === 13 && chave.startsWith('55')) chave = chave.slice(2);
+  if (!/^[1-9]{2}9\d{8}$/.test(chave)) throw new Erro(400, 'Telefone inválido. Use o celular com DDD (ex.: 11 91234-5678).');
+  if (!cpfValido(documento)) throw new Erro(400, 'Informe o CPF do titular da chave (o dono da conta que vai receber).');
+  return { tipo, chave, documento };
+}
 // Sacar exige o app autenticador ativo e o código dele (ou de reserva) em cada saque: quem roubar a senha
-// ou a sessão não tira o dinheiro.
+// ou a sessão não tira o dinheiro. O valor sai do saldo na hora e o pedido espera o operador aprovar.
 rota('POST', '/api/carteira/saque', { login: true }, ({ u, corpo, ip }) => {
   limitar(`carteira:${u.id}`, 20, 60e3);
   if (u.visitante) throw new Erro(403, 'Visitantes não podem sacar. Crie uma conta para sacar.');
   if (!u.totp_ativo) throw new Erro(403, 'Para sacar, ative a verificação em duas etapas em Minha conta.', 'configurar_2fa');
+  const r0 = rodada(u.id);
+  if (r0.falta > 0) throw new Erro(403, `Para sacar, jogue antes o valor que entrou na carteira: faltam ${moedasBrl(r0.falta)} em partidas.`, 'rodada');
+  const pix = chavePix(corpo);
   if (!corpo.codigo) throw new Erro(401, 'Digite o código do app autenticador.', 'precisa_codigo');
   limitar(`saque-codigo:${u.id}`, 10, 15 * 60e3, 'Muitas tentativas de código. Espere 15 minutos.');
   if (!conferirSegundoFator(u, corpo.codigo)) {
@@ -607,10 +717,11 @@ rota('POST', '/api/carteira/saque', { login: true }, ({ u, corpo, ip }) => {
     const v = centavos(corpo.valor);
     if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
     if (v > saldo(u.id)) throw new Erro(400, 'Moedas insuficientes para esse saque.');
-    // o valor sai do saldo agora (reservado) e o pedido espera o operador: aprovado = pago; recusado = volta ao saldo
-    lancar(u.id, 'saque', -v, 'Saque solicitado · aguardando aprovação');
-    const id = Number(db.prepare("INSERT INTO saques (usuario_id, valor, estado, criado) VALUES (?, ?, 'pendente', ?)").run(u.id, v, agora()).lastInsertRowid);
-    auditar('saque', { u, ip, detalhe: { valor: v, saque: id } });
+    if (rodada(u.id).falta > 0) throw new Erro(403, 'Para sacar, jogue antes o valor que entrou na carteira.', 'rodada');
+    lancar(u.id, 'saque', -v, `Saque Pix solicitado (${pix.tipo === 'cpf' ? 'CPF' : 'telefone'}) · aguardando aprovação`);
+    const id = Number(db.prepare("INSERT INTO saques (usuario_id, valor, estado, criado, chave_tipo, chave, documento) VALUES (?, ?, 'pendente', ?, ?, ?, ?)")
+      .run(u.id, v, agora(), pix.tipo, pix.chave, pix.documento).lastInsertRowid);
+    auditar('saque', { u, ip, detalhe: { valor: v, saque: id, chave: pix.tipo } });
     return { saldo: saldo(u.id), saque: saquePublico(db.prepare('SELECT * FROM saques WHERE id = ?').get(id)) };
   });
 });
@@ -804,13 +915,29 @@ rota('PUT', '/api/admin/regras', { operador: true }, ({ corpo, u, ip }) => {
 });
 // Saques (operador): o jogador pede, o valor sai do saldo na hora (reservado) e fica pendente.
 // Aprovar = dar baixa (o dinheiro foi enviado); recusar = devolve o valor ao saldo (lançamento de estorno).
+// Chave Pix: o operador vê inteira (para pagar); o jogador vê só o final.
+const formatarChave = (tipo, c) => !c ? '' : tipo === 'cpf' ? c.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : c.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
 const saquePublico = s => s && ({
   id: s.id, valor: s.valor, estado: s.estado, criado: s.criado, decidido: s.decidido, motivo: s.motivo || '',
-  ...(s.jogador !== undefined ? { usuario: { id: s.usuario_id, nome: s.jogador, email: s.email || '' } } : {}),
+  chaveTipo: s.chave_tipo || null,
+  ...(s.jogador !== undefined
+    ? { usuario: { id: s.usuario_id, nome: s.jogador, email: s.email || '' }, chave: formatarChave(s.chave_tipo, s.chave), documento: formatarChave('cpf', s.documento), gatewayId: s.gateway_id || null }
+    : { chaveFinal: s.chave ? s.chave.slice(-4) : '' }),
 });
+// Saque que voltou do gateway com falha: devolve o valor ao saldo (uma vez só).
+function saqueFalhou(id, motivo) {
+  return transacao(() => {
+    const s = db.prepare('SELECT * FROM saques WHERE id = ?').get(id);
+    if (!s || db.prepare("UPDATE saques SET estado = 'falhou', motivo = ? WHERE id = ? AND estado = 'processando'").run(String(motivo || 'falha no envio do Pix').slice(0, 200), id).changes !== 1) return false;
+    lancar(s.usuario_id, 'estorno', s.valor, 'Saque não concluído pelo banco · valor devolvido');
+    auditar('saque_falhou', { u: s.usuario_id, detalhe: { saque: id, motivo } });
+    return true;
+  });
+}
+const saquePago = id => db.prepare("UPDATE saques SET estado = 'aprovado' WHERE id = ? AND estado = 'processando'").run(id).changes === 1;
 rota('GET', '/api/admin/saques', { operador: true }, ({ req }) => {
   const q = consulta(req);
-  const estado = ['pendente', 'aprovado', 'recusado'].includes(q.get('estado')) ? q.get('estado') : null;
+  const estado = ['pendente', 'processando', 'aprovado', 'recusado', 'falhou'].includes(q.get('estado')) ? q.get('estado') : null;
   const busca = String(q.get('q') || '').trim().slice(0, 120);
   const por = Math.min(100, Math.max(5, Number(q.get('por')) || 20));
   const pagina = Math.max(1, Math.floor(Number(q.get('pagina')) || 1));
@@ -821,28 +948,79 @@ rota('GET', '/api/admin/saques', { operador: true }, ({ req }) => {
   const lista = db.prepare(`SELECT s.*, us.nome AS jogador, us.email AS email FROM saques s JOIN usuarios us ON us.id = s.usuario_id WHERE ${onde}
       ORDER BY CASE s.estado WHEN 'pendente' THEN 0 ELSE 1 END, CASE s.estado WHEN 'pendente' THEN s.criado ELSE -COALESCE(s.decidido, s.criado) END LIMIT ? OFFSET ?`)
     .all(...args, por, (pagina - 1) * por).map(x => ({ ...saquePublico(x), saldoAtual: saldo(x.usuario_id) }));
-  const resumo = Object.fromEntries(['pendente', 'aprovado', 'recusado'].map(e => {
+  const resumo = Object.fromEntries(['pendente', 'processando', 'aprovado', 'recusado', 'falhou'].map(e => {
     const r = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(valor), 0) AS v FROM saques WHERE estado = ?').get(e);
     return [e, { quantidade: r.n, valor: r.v }];
   }));
-  return { total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)), saques: lista, resumo };
+  return { total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)), saques: lista, resumo, envioAutomatico: caju.saqueAutomatico() };
 });
-rota('POST', '/api/admin/saques/(\\d{1,12})', { operador: true }, ({ m, corpo, u, ip }) => transacao(() => {
-  const s = db.prepare('SELECT * FROM saques WHERE id = ?').get(Number(m[1]));
-  if (!s) throw new Erro(404, 'Saque não encontrado.');
-  if (s.estado !== 'pendente') throw new Erro(409, `Esse saque já foi ${s.estado}.`);
+// Decisão do operador. Recusar devolve o valor ao saldo. Aprovar: com CAJUPAY_SAQUE_AUTOMATICO=1, manda o Pix pela
+// CajuPay (fica "processando" até o banco confirmar; se falhar, devolve); sem isso, só dá baixa (pago por fora).
+rota('POST', '/api/admin/saques/(\\d{1,12})', { operador: true }, async ({ m, corpo, u, ip }) => {
   const aprovar = corpo.decisao === 'aprovar';
   if (!aprovar && corpo.decisao !== 'recusar') throw new Erro(400, 'Decisão inválida.');
   const motivo = texto(corpo.motivo, 200);
-  // o UPDATE só vale se ainda estiver pendente: dois cliques ao mesmo tempo não devolvem duas vezes
-  const mudou = db.prepare('UPDATE saques SET estado = ?, decidido = ?, operador_id = ?, motivo = ? WHERE id = ? AND estado = ?')
-    .run(aprovar ? 'aprovado' : 'recusado', agora(), u.id, motivo || null, s.id, 'pendente').changes;
-  if (mudou !== 1) throw new Erro(409, 'Esse saque já foi decidido.');
-  if (!aprovar) lancar(s.usuario_id, 'estorno', s.valor, `Saque recusado · valor devolvido${motivo ? ` (${motivo})` : ''}`);
-  auditar(aprovar ? 'saque_aprovado' : 'saque_recusado', { u, ip, detalhe: { saque: s.id, usuario: s.usuario_id, valor: s.valor, motivo } });
-  auditar(aprovar ? 'saque_pago' : 'saque_devolvido', { u: s.usuario_id, ip, detalhe: { saque: s.id, valor: s.valor } });
-  return { saque: saquePublico(db.prepare('SELECT * FROM saques WHERE id = ?').get(s.id)) };
-}));
+  const automatico = aprovar && caju.saqueAutomatico();
+  const s = transacao(() => {
+    const s = db.prepare('SELECT * FROM saques WHERE id = ?').get(Number(m[1]));
+    if (!s) throw new Erro(404, 'Saque não encontrado.');
+    if (s.estado !== 'pendente') throw new Erro(409, `Esse saque já foi ${s.estado}.`);
+    // o UPDATE só vale se ainda estiver pendente: dois cliques ao mesmo tempo não devolvem nem pagam duas vezes
+    const novo = !aprovar ? 'recusado' : automatico ? 'processando' : 'aprovado';
+    const mudou = db.prepare('UPDATE saques SET estado = ?, decidido = ?, operador_id = ?, motivo = ? WHERE id = ? AND estado = ?')
+      .run(novo, agora(), u.id, motivo || null, s.id, 'pendente').changes;
+    if (mudou !== 1) throw new Erro(409, 'Esse saque já foi decidido.');
+    if (!aprovar) lancar(s.usuario_id, 'estorno', s.valor, `Saque recusado · valor devolvido${motivo ? ` (${motivo})` : ''}`);
+    auditar(aprovar ? 'saque_aprovado' : 'saque_recusado', { u, ip, detalhe: { saque: s.id, usuario: s.usuario_id, valor: s.valor, motivo, automatico } });
+    auditar(aprovar ? 'saque_pago' : 'saque_devolvido', { u: s.usuario_id, ip, detalhe: { saque: s.id, valor: s.valor } });
+    return s;
+  });
+  if (automatico) {
+    if (!s.chave) {
+      db.prepare("UPDATE saques SET estado = 'pendente', decidido = NULL WHERE id = ? AND estado = 'processando'").run(s.id);
+      throw new Erro(400, 'Esse saque não tem chave Pix (pedido antigo). Pague por fora e aprove com o envio automático desligado, ou recuse.');
+    }
+    try {
+      const r = await caju.enviarSaque({ saqueId: s.id, valor: s.valor, chaveTipo: s.chave_tipo, chave: s.chave, documentoTitular: s.documento });
+      db.prepare('UPDATE saques SET gateway_id = ? WHERE id = ?').run(String(r?.payout_id || r?.id || ''), s.id);
+      if (r?.status === 'paid') saquePago(s.id);
+      else if (['failed', 'cancelled', 'canceled'].includes(r?.status)) saqueFalhou(s.id, r.last_error || r.cancel_message);
+    } catch (e) {
+      // não chegou a sair: volta para pendente para o operador tentar de novo ou recusar
+      db.prepare("UPDATE saques SET estado = 'pendente', decidido = NULL, operador_id = NULL WHERE id = ? AND estado = 'processando'").run(s.id);
+      auditar('saque_gateway_erro', { u, ip, detalhe: { saque: s.id, erro: String(e.message).slice(0, 300) } });
+      throw new Erro(502, `A CajuPay recusou o envio: ${String(e.message).replace(/^CajuPay \d+: /, '').slice(0, 200)}`);
+    }
+  }
+  return { saque: saquePublico(db.prepare('SELECT s.*, us.nome AS jogador, us.email AS email FROM saques s JOIN usuarios us ON us.id = s.usuario_id WHERE s.id = ?').get(s.id)) };
+});
+// Webhook da CajuPay (Pix pago, saque pago/falhou). Assinado com HMAC; o corpo cru é lido em atender().
+function webhookCajuPay(evento) {
+  const tipo = String(evento?.type || ''), o = evento?.data?.object || {};
+  if (tipo === 'pix.payment.paid') {
+    const d = db.prepare('SELECT * FROM depositos WHERE gateway_id = ?').get(String(o.cajupay_payment_id || o.payment_id || ''));
+    if (!d) return 'deposito_desconhecido';
+    if (Number(o.amount_cents) !== d.valor) { auditar('deposito_valor_divergente', { u: d.usuario_id, detalhe: { deposito: d.id, pago: o.amount_cents } }); return 'valor_divergente'; }
+    return creditarDeposito(d.id, 'webhook') ? 'creditado' : 'ja_creditado';
+  }
+  if (tipo === 'payout.paid' || tipo === 'payout.failed') {
+    const ref = /^saque-(\d+)$/.exec(String(o.external_ref || o.customer_ref || ''));
+    const s = ref ? db.prepare('SELECT * FROM saques WHERE id = ?').get(Number(ref[1]))
+      : db.prepare('SELECT * FROM saques WHERE gateway_id = ?').get(String(o.cajupay_payout_id || ''));
+    if (!s) return 'saque_desconhecido';
+    if (tipo === 'payout.paid') return saquePago(s.id) ? 'saque_pago' : 'ja_tratado';
+    return saqueFalhou(s.id, o.last_error || o.cancel_message) ? 'saque_devolvido' : 'ja_tratado';
+  }
+  return 'ignorado';
+}
+// Pix pendentes: confere na CajuPay a cada 2 min por até 12 h (se o webhook se perder); depois disso, vence.
+setInterval(async () => {
+  if (!caju.configurado()) return;
+  db.prepare("UPDATE depositos SET estado = 'expirado' WHERE estado = 'pendente' AND criado < ?").run(agora() - 12 * 3600e3);
+  for (const d of db.prepare("SELECT * FROM depositos WHERE estado = 'pendente' AND gateway = 'cajupay' ORDER BY id LIMIT 50").all()) {
+    try { await conferirDeposito(d); } catch (e) { console.error('[cajupay] consulta', d.id, e.message); }
+  }
+}, 2 * 60e3).unref();
 // ---------- usuários (operador: suporte) ----------
 // Somas por jogador vindas do livro-razão. "resultado" = o que o jogador ganhou ou perdeu jogando
 // (entradas + frutas + estornos); o lucro da casa com ele é o contrário.
@@ -1038,6 +1216,13 @@ async function iniciar() {
   prepararOperador();
   prepararCodigoAtivacao();
   liquidarAnalisesAntigas();
+  // CajuPay: cadastra o webhook (Pix pago e saques) no endereço público do site, se ainda não tiver o segredo
+  if (caju.configurado()) {
+    console.log('CajuPay: Pix real ligado' + (caju.saqueAutomatico() ? ' (saques enviados pela CajuPay ao aprovar)' : ' (saques: aprovar só dá baixa)'));
+    caju.registrarWebhook(`${SITE_URL}/api/webhooks/cajupay`)
+      .then(r => console.log(r.ok ? 'CajuPay: webhook pronto.' : `CajuPay: webhook NÃO configurado (${r.motivo || 'sem segredo'}) — depósitos dependem da consulta a cada 2 min.`))
+      .catch(e => console.error('[cajupay] cadastro do webhook falhou:', e.message));
+  } else console.log('CajuPay não configurada: depósitos simulados (sem dinheiro de verdade).');
   replay.iniciar(); // a thread de replay já carrega o nível ao subir o servidor
   require('./backup').agendar(db, require('./banco').arquivo);
 }
@@ -1049,6 +1234,20 @@ async function atender(req, res, url) {
   const ip = ipDe(req);
   try {
     limitar(`api:${ip}`, 600, 60e3);
+    // Webhook da CajuPay: vem do servidor deles (sem cookie nem X-Arena); só vale com a assinatura HMAC certa.
+    if (url === '/api/webhooks/cajupay') {
+      if (metodo !== 'POST') throw new Erro(405, 'Método não permitido.');
+      const cru = await lerCru(req, 256 * 1024);
+      if (!caju.conferirAssinatura(req.headers['x-cajupay-signature'], cru)) {
+        auditar('webhook_assinatura_invalida', { ip });
+        throw new Erro(401, 'Assinatura inválida.');
+      }
+      let evento;
+      try { evento = JSON.parse(cru.toString('utf8')); } catch { throw new Erro(400, 'JSON inválido.'); }
+      const r = webhookCajuPay(evento);
+      enviar(res, 200, { ok: true, resultado: r });
+      return true;
+    }
     const achada = rotas.find(r => r.metodo === metodo && r.padrao.test(url));
     if (!achada) {
       const outra = rotas.some(r => r.padrao.test(url));

@@ -30,6 +30,8 @@ Outras variáveis: `PORT`, `ARENA_DB` (arquivo do banco; padrão `servidor/dados
 
 **E-mail** (recuperação de senha): `ARENA_SMTP_URL=smtps://usuario:senha@smtp.provedor.com:465` (ou `smtp://...:587` com STARTTLS; sem TLS ele não envia), `ARENA_EMAIL_DE="Crash Arena <nao-responda@seu-dominio>"` e `ARENA_SITE_URL=https://seu-site` (obrigatório com SMTP; é o endereço que vai no link). Sem `ARENA_SMTP_URL`, o e-mail sai no console do servidor.
 
+**Pix (CajuPay)**: `CAJUPAY_API_KEY=gpk_...` e `CAJUPAY_API_SECRET=gsk_...` (painel CajuPay → API → Chaves; escopos `payments.write`, `webhooks.write` e, para saque automático, `payouts.write`). Com elas, o depósito gera um Pix de verdade e o saldo entra quando o pagamento é confirmado (webhook em `/api/webhooks/cajupay`, cadastrado sozinho ao subir, mais consulta a cada 2 min). `CAJUPAY_SAQUE_AUTOMATICO=1` faz o "Aprovar" do admin enviar o Pix pela CajuPay (precisa de KYC aprovado). Sem as chaves, o depósito é simulado (testes). As chaves ficam só em `/opt/arena/arena.env`, nunca no GitHub.
+
 **Backup:** automático ao subir e a cada 6 h em `servidor/dados/backups/` (guarda 7 dias). `ARENA_BACKUP_HORAS`, `ARENA_BACKUP_MANTER`, `ARENA_BACKUP_PASTA`; cópia na hora com `node servidor/backup.js`. Como restaurar: [docs/SEGURANCA.md](docs/SEGURANCA.md#5-backups).
 
 **Segurança:** ver [docs/SEGURANCA.md](docs/SEGURANCA.md). Teste automático de ataques (sobe um servidor descartável e tenta ~50 fraudes):
