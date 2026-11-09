@@ -160,7 +160,7 @@
 </div>
 <div id="scoreboard" hidden><img src="../img/jogo/score-board.png" alt="Saldo R$"><div class="digits"></div></div>
 <div id="tut" hidden>
-  <div class="tut-topo"><div class="tut-passos" id="tut-passos"><i></i><i></i><i></i></div><button type="button" id="tut-pular">Pular tutorial</button></div>
+  <div class="tut-topo"><div class="tut-passos" id="tut-passos"><i></i><i></i><i></i><i></i></div><button type="button" id="tut-pular">Pular tutorial</button></div>
   <div class="tut-cartao" id="tut-cartao" role="dialog" aria-live="polite">
     <h3 id="tut-titulo"></h3>
     <p id="tut-texto"></p>
@@ -1455,7 +1455,10 @@ const progressoTimer = setInterval(enviarProgresso, 2000);
 const tutorial = TUTORIAL ? (() => {
   const $t = id => document.getElementById(id);
   const toque = () => document.body.classList.contains('toque');
-  const LICOES = ['pulo', 'fruta', 'desvio'];
+  const LICOES = ['pulo', 'bloco', 'fruta', 'desvio'];
+  // Bloco de pedra da fase original, sempre no mesmo lugar no começo da corrida: passa indo pela direita
+  // (pela esquerda trava; medido com a simulação). Avisa um pouco antes e conta depois que passou.
+  const BLOCO = { zAviso: 121000, zPassou: 119800, lado: 1 };
   const feitas = new Set();
   let pausa = null;        // { licao, lado } enquanto espera o gesto
   let seguindo = null;     // lição em andamento depois do gesto: { licao, alvo, zFim }
@@ -1490,6 +1493,7 @@ const tutorial = TUTORIAL ? (() => {
       const d = extra.lado > 0;
       cartao('PEGUE A FRUTA!', `Cada fruta vale moedas. Vá para a ${d ? 'direita' : 'esquerda'} para pegar.`, { gesto: d ? 'dir' : 'esq', tecla: toque() ? `arraste para a ${d ? 'direita' : 'esquerda'}` : `segure ${d ? '→' : '←'}` });
     }
+    if (licao === 'bloco') cartao('DESVIE DO BLOCO!', 'Tem um bloco de pedra no caminho. Passe pela direita.', { gesto: 'dir', tecla: toque() ? 'arraste para a direita' : 'segure →' });
     if (licao === 'desvio') cartao('CUIDADO COM O CARANGUEJO!', 'Desvie para o lado ou pule por cima dele.', { gesto: 'cima', tecla: toque() ? 'arraste para o lado ou para cima' : '← → ou ESPAÇO' });
   }
   function retomar() {
@@ -1500,7 +1504,7 @@ const tutorial = TUTORIAL ? (() => {
   }
   function final() {
     player.frozen = true;
-    cartao('MANDOU BEM! 🎉', 'Você já sabe pular, pegar frutas e desviar. Agora é pra valer: cada fruta coletada devolve moedas para a sua carteira.', { botao: 'JOGAR DE VERDADE ➜' });
+    cartao('MANDOU BEM! 🎉', 'Você já sabe pular, desviar dos obstáculos e pegar frutas. Agora é pra valer: cada fruta coletada devolve moedas para a sua carteira.', { botao: 'JOGAR DE VERDADE ➜' });
   }
   async function sair(pulou) {
     $t('tut-botao').disabled = true;
@@ -1515,7 +1519,7 @@ const tutorial = TUTORIAL ? (() => {
   $t('tut-pular').addEventListener('click', e => { e.stopPropagation(); sair(true); });
   // boas-vindas: o jogo começa parado
   player.frozen = true;
-  cartao('BEM-VINDO À ARENA!', 'Antes da primeira partida, um treino rápido (sem valer moedas): pular, pegar frutas e desviar.', { botao: 'COMEÇAR O TREINO ➜' });
+  cartao('BEM-VINDO À ARENA!', 'Antes da primeira partida, um treino rápido (sem valer moedas): pular, desviar e pegar frutas.', { botao: 'COMEÇAR O TREINO ➜' });
 
   // distância até o próximo buraco à frente (ou null)
   const buracoAFrente = (ate = 700) => {
@@ -1534,24 +1538,31 @@ const tutorial = TUTORIAL ? (() => {
       // esperando o gesto certo
       if (pausa) {
         const ok = pausa.licao === 'pulo' ? jumpPressed
-          : pausa.licao === 'fruta' ? Math.sign(x) === pausa.lado && Math.abs(x) >= 0.25
+          : pausa.licao === 'fruta' || pausa.licao === 'bloco' ? Math.sign(x) === pausa.lado && Math.abs(x) >= 0.25
           : jumpPressed || Math.abs(x) >= 0.25;
         if (ok) retomar();
         return;
       }
       if (player.deadTimer > 0) return;
+      const parado = Math.abs(p.z - zAntes) < 0.5; zAntes = p.z;
       // lição em andamento: conta quando passa do obstáculo / pega a fruta
       if (seguindo) {
         const s = seguindo;
         if (s.licao === 'pulo' && p.z < s.zFim && player.onGround) { seguindo = null; marcar('pulo'); }
         else if (s.licao === 'fruta' && !s.alvo.alive) { seguindo = null; marcar('fruta'); }
         else if (s.licao === 'fruta' && s.alvo.z > p.z + 150) seguindo = null; // passou sem pegar: a próxima fruta ensina de novo
+        else if (s.licao === 'bloco' && p.z < BLOCO.zPassou) { seguindo = null; $t('tut-dica').hidden = true; marcar('bloco'); }
+        else if (s.licao === 'bloco' && parado && player.onGround) {
+          // encostou no bloco sem ir para a direita: lembra o gesto (sem parar o jogo)
+          const d = $t('tut-dica'); d.textContent = toque() ? 'Arraste para a direita para passar' : 'Segure → para passar'; d.hidden = false;
+        }
         else if (s.licao === 'desvio' && (s.alvo.state !== 'walk' || s.alvo.pos.z > p.z + 200)) { seguindo = null; marcar('desvio'); }
         return;
       }
       // procura a próxima lição que ainda falta
       const dp = buracoAFrente();
       if (!feitas.has('pulo') && dp !== null && dp <= 290 && player.onGround) return pausar('pulo', { zFim: p.z - dp - 500 });
+      if (!feitas.has('bloco') && p.z < BLOCO.zAviso && p.z > BLOCO.zPassou && player.onGround) return pausar('bloco', { lado: BLOCO.lado });
       if (!feitas.has('fruta')) {
         const f = pickups.filter(f => f.alive && f.z < p.z && p.z - f.z < 650).sort((a, b) => b.z - a.z)[0];
         if (f) return pausar('fruta', { alvo: f, lado: f.x >= p.x ? 1 : -1 });
@@ -1561,7 +1572,6 @@ const tutorial = TUTORIAL ? (() => {
         if (e) return pausar('desvio', { alvo: e });
       }
       // parado num degrau/obstáculo: lembra do pulo (sem parar o jogo)
-      const parado = Math.abs(p.z - zAntes) < 0.5; zAntes = p.z;
       if (parado && player.onGround) { if (!paradoDesde) paradoDesde = performance.now(); } else paradoDesde = 0;
       // depois da lição, os próximos buracos e caranguejos só ganham um aviso (o jogo não para)
       const dica = $t('tut-dica');
