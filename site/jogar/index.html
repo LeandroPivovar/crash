@@ -91,6 +91,38 @@
   canvas { touch-action: none; }
   /* celular: nada de zoom com toque duplo ou pinça, nem seleção/menu ao segurar (o jogo usa a tela toda) */
   html, body { touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  /* ---- tutorial: cartões por cima do jogo; o jogo para até o gesto certo ---- */
+  body.tutorial #scoreboard { display: none !important; } /* sem dinheiro no tutorial */
+  body.tutorial #toque { display: block; }
+  body.tutorial .toque-zona span { display: none; }
+  #tut { position: fixed; inset: 0; z-index: 65; pointer-events: none; display: flex; flex-direction: column; align-items: center; font-family: Inter, system-ui, sans-serif; color: #fff; }
+  #tut[hidden] { display: none; }
+  .tut-topo { margin-top: calc(10px + env(safe-area-inset-top)); display: flex; gap: 10px; align-items: center; }
+  .tut-passos { display: flex; gap: 6px; }
+  .tut-passos i { width: 30px; height: 6px; border-radius: 3px; background: #ffffff35; }
+  .tut-passos i.feito { background: #ffb84a; }
+  #tut-pular { pointer-events: auto; background: rgba(16,11,32,.7); color: #d8cce6; border: 1px solid #ffffff30; border-radius: 16px; padding: 5px 12px; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+  .tut-cartao { margin-top: 6vh; width: min(420px, calc(100vw - 32px)); background: linear-gradient(140deg, #2b1c3bf0, #1a1428f5); border: 1px solid #ffb84a66; border-radius: 20px;
+    padding: 18px 20px; text-align: center; box-shadow: 0 18px 50px #000a; animation: tutEntra .25s ease-out; }
+  .tut-cartao[hidden] { display: none; }
+  .tut-cartao h3 { margin: 0 0 6px; font: 800 30px "Barlow Condensed", Impact, sans-serif; color: #ffc34f; letter-spacing: .5px; }
+  .tut-cartao p { margin: 0; font-size: 15px; line-height: 1.4; color: #eee4f7; }
+  .tut-cartao button { pointer-events: auto; margin-top: 14px; width: 100%; background: linear-gradient(#ffb545, #ff8f2b); color: #2a1600; border: 0; border-radius: 12px; padding: 13px; font: 800 17px "Barlow Condensed", Impact, sans-serif; letter-spacing: .5px; cursor: pointer; }
+  .tut-gesto { position: relative; height: 70px; margin: 10px auto 0; width: 200px; }
+  .tut-gesto span { position: absolute; left: 50%; top: 20px; font-size: 40px; transform: translateX(-50%); filter: drop-shadow(0 3px 4px #000a); }
+  .tut-gesto.dir span { animation: tutDir 1.1s ease-in-out infinite; }
+  .tut-gesto.esq span { animation: tutEsq 1.1s ease-in-out infinite; }
+  .tut-gesto.cima span { animation: tutCima 1.1s ease-in-out infinite; }
+  .tut-gesto b { display: inline-block; margin-top: 4px; font: 800 13px Inter, system-ui, sans-serif; color: #ffb84a; background: #00000055; border-radius: 6px; padding: 3px 8px; }
+  .tut-dica { margin-top: 12vh; background: rgba(16,11,32,.82); border: 1px solid #ffffff2a; border-radius: 14px; padding: 9px 16px; font: 700 14px Inter, system-ui, sans-serif; }
+  .tut-dica[hidden] { display: none; }
+  .tut-boa { margin-top: 18vh; font: 800 54px "Barlow Condensed", Impact, sans-serif; color: #ffc34f; text-shadow: 0 4px 0 #7a3b00, 0 8px 20px #000; animation: tutBoa .9s ease-out forwards; }
+  .tut-boa[hidden] { display: none; }
+  @keyframes tutEntra { from { opacity: 0; transform: translateY(-12px) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes tutDir { 0%, 15% { transform: translateX(-90%); } 70%, 100% { transform: translateX(60%); opacity: 1; } }
+  @keyframes tutEsq { 0%, 15% { transform: translateX(-10%); } 70%, 100% { transform: translateX(-160%); } }
+  @keyframes tutCima { 0%, 15% { top: 34px; } 70%, 100% { top: -6px; } }
+  @keyframes tutBoa { 0% { opacity: 0; transform: scale(.6); } 25% { opacity: 1; transform: scale(1.08); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
 </style>
 </head>
 <body>
@@ -127,6 +159,17 @@
   <button id="hud-reset">Zerar sessão</button>
 </div>
 <div id="scoreboard" hidden><img src="../img/jogo/score-board.png" alt="Saldo R$"><div class="digits"></div></div>
+<div id="tut" hidden>
+  <div class="tut-topo"><div class="tut-passos" id="tut-passos"><i></i><i></i><i></i></div><button type="button" id="tut-pular">Pular tutorial</button></div>
+  <div class="tut-cartao" id="tut-cartao" role="dialog" aria-live="polite">
+    <h3 id="tut-titulo"></h3>
+    <p id="tut-texto"></p>
+    <div class="tut-gesto" id="tut-gesto" hidden><span>👆</span><b id="tut-tecla"></b></div>
+    <button type="button" id="tut-botao" hidden></button>
+  </div>
+  <div class="tut-dica" id="tut-dica" hidden></div>
+  <div class="tut-boa" id="tut-boa" hidden>BOA!</div>
+</div>
 <div id="carregando" role="status" aria-live="polite">
   <div class="load-card">
     <img class="load-logo" src="../img/plataforma/logo-arena-crush.png" alt="Arena Crush" width="390" height="201">
@@ -177,7 +220,13 @@ import { baixarComProgresso } from '../js/jogo/carregar.js';
 // Partida do Crash Arena, criada no lobby (entrada, semente e regras). Sem login ou sem partida, volta ao
 // lobby. Se a página foi recarregada no meio da corrida, a partida termina com o que já tinha sido coletado.
 const { usuario: jogador } = await arena.sessao().catch(() => ({}));
-const partida = jogador ? await arena.partidaAberta().catch(() => null) : null;
+// Tutorial (?tutorial=1): trecho curto e lento, só no navegador (sem partida no servidor nem dinheiro). O jogo
+// para em cada lição até a pessoa fazer o gesto certo: pular o buraco, pegar a fruta, desviar do caranguejo.
+const TUTORIAL = new URLSearchParams(location.search).has('tutorial') && !!jogador;
+const partida = TUTORIAL
+  ? { id: null, entrada: 1000, semente: 7, estado: 'criada', regras: { enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 1, fruitMin: 3, fruitMax: 4, speedStart: 0.85, speedGain: 0, speedMax: 0.85 } }
+  : jogador ? await arena.partidaAberta().catch(() => null) : null;
+if (TUTORIAL) document.body.classList.add('tutorial');
 if (!partida) {
   location.replace(jogador ? '../lobby/' : '../');
   await new Promise(() => {}); // para aqui
@@ -676,7 +725,7 @@ const BOX_KIND = { 0: 'break', 2: 'break', 6: 'break', 8: 'break', 9: 'break', 1
 const BOX_LOOT = { 2: 'fruit', 20: 'fruit', 10: 'question', 17: 'question', 6: 'multi', 8: 'life', 9: 'aku' };
 for (const b of boxes) { b.kind = BOX_KIND[b.sub] || 'break'; b.loot = BOX_LOOT[b.sub] || null; }
 let broken = 0, deaths = 0;
-const START_LIVES = 1; // pedido: uma vida só (frutas e caixas de vida não dão vidas extras)
+const START_LIVES = TUTORIAL ? 999 : 1; // pedido: uma vida só (no tutorial, morrer só volta um pouco)
 let fruit = 0, lives = START_LIVES, levelTime = 0, finished = false;
 // A corrida (física, inimigos, trilha, frutas) é simulada em mundo.js, o mesmo código que o servidor usa para
 // refazer a corrida; aqui ficam só os ganchos que desenham, tocam som e atualizam a placa.
@@ -730,6 +779,7 @@ const mundo = criarMundo(nivel, {
       deaths++; session.mortes++;
       lives--;
       updateScore();
+      if (TUTORIAL) { tutorial?.morreu(); return; }
       // fim de jogo só depois da animação de morte (antes do renascimento)
       if (lives <= 0) setTimeout(gameOver, Math.max(900, player.deadTimer * 1000 - 150));
     },
@@ -1324,7 +1374,7 @@ const blockInput = e => { if (gameIsOver && e.key !== 'F5' && !(e.ctrlKey && e.c
 for (const t of ['keydown', 'keyup', 'pointerdown', 'pointerup', 'pointermove', 'mousedown', 'wheel', 'contextmenu']) addEventListener(t, blockInput, { capture: true, passive: false });
 // Tela inicial: imagem de START por cima de tudo; o jogo fica parado e só a barra de espaço começa a
 // corrida (ela não vira pulo). Teclas e cliques não passam enquanto a tela está aberta.
-let waitingStart = loopMode;
+let waitingStart = loopMode && !TUTORIAL; // no tutorial, quem começa é o cartão de boas-vindas
 const startScreen = document.getElementById('startscreen');
 // A entrada já foi escolhida no lobby (partida do Crash Arena): o saldo começa em zero e cada fruta
 // devolve uma porcentagem dela. Esc na tela de START desiste e devolve a entrada.
@@ -1386,7 +1436,7 @@ let runStartTime = 0;
 const gravador = new Gravador();
 let paresConfirmados = 0, enviando = false, ultimoEnvio = 0;
 function enviarProgresso() {
-  if (!runStartTime || gameIsOver || enviando || performance.now() - ultimoEnvio < 1000) return;
+  if (TUTORIAL || !runStartTime || gameIsOver || enviando || performance.now() - ultimoEnvio < 1000) return;
   const desde = Math.max(0, paresConfirmados - 1); // o último par confirmado pode ter crescido
   const rle = gravador.pedaco(desde);
   if (!rle.length) return;
@@ -1397,6 +1447,135 @@ function enviarProgresso() {
     .finally(() => { enviando = false; });
 }
 const progressoTimer = setInterval(enviarProgresso, 2000);
+
+// ---------- tutorial ----------
+// Cada lição dispara quando o que ela ensina aparece à frente (buraco, fruta, caranguejo): o jogo para, mostra o
+// gesto e só continua quando a pessoa faz o gesto certo. A lição conta quando a pessoa passa do obstáculo (ou pega
+// a fruta); se morrer, renasce um pouco antes e a lição volta. Terminando as três, vai para o lobby jogar de verdade.
+const tutorial = TUTORIAL ? (() => {
+  const $t = id => document.getElementById(id);
+  const toque = () => document.body.classList.contains('toque');
+  const LICOES = ['pulo', 'fruta', 'desvio'];
+  const feitas = new Set();
+  let pausa = null;        // { licao, lado } enquanto espera o gesto
+  let seguindo = null;     // lição em andamento depois do gesto: { licao, alvo, zFim }
+  let fim = false, comecou = false, paradoDesde = 0, zAntes = 0;
+  $t('tut').hidden = false;
+  function cartao(titulo, texto, { gesto = null, tecla = '', botao = null } = {}) {
+    $t('tut-cartao').hidden = false;
+    $t('tut-titulo').textContent = titulo;
+    $t('tut-texto').textContent = texto;
+    $t('tut-gesto').hidden = !gesto;
+    if (gesto) { $t('tut-gesto').className = `tut-gesto ${gesto}`; $t('tut-tecla').textContent = tecla; }
+    $t('tut-botao').hidden = !botao;
+    if (botao) $t('tut-botao').textContent = botao;
+  }
+  const esconder = () => { $t('tut-cartao').hidden = true; };
+  function boa(texto = 'BOA!') {
+    const b = $t('tut-boa'); b.textContent = texto; b.hidden = true; void b.offsetWidth; b.hidden = false;
+    setTimeout(() => { b.hidden = true; }, 900);
+  }
+  function marcar(licao) {
+    feitas.add(licao);
+    [...$t('tut-passos').children].forEach((i, k) => i.classList.toggle('feito', k < feitas.size));
+    boa();
+    if (feitas.size === LICOES.length && !fim) { fim = true; setTimeout(final, 1300); }
+  }
+  function pausar(licao, extra) {
+    pausa = { licao, ...extra };
+    player.frozen = true;
+    jumpPressed = false;
+    if (licao === 'pulo') cartao('PULE O BURACO!', 'Tem um buraco logo à frente.', { gesto: 'cima', tecla: toque() ? 'arraste para cima' : 'aperte ESPAÇO' });
+    if (licao === 'fruta') {
+      const d = extra.lado > 0;
+      cartao('PEGUE A FRUTA!', `Cada fruta vale moedas. Vá para a ${d ? 'direita' : 'esquerda'} para pegar.`, { gesto: d ? 'dir' : 'esq', tecla: toque() ? `arraste para a ${d ? 'direita' : 'esquerda'}` : `segure ${d ? '→' : '←'}` });
+    }
+    if (licao === 'desvio') cartao('CUIDADO COM O CARANGUEJO!', 'Desvie para o lado ou pule por cima dele.', { gesto: 'cima', tecla: toque() ? 'arraste para o lado ou para cima' : '← → ou ESPAÇO' });
+  }
+  function retomar() {
+    seguindo = { ...pausa };
+    pausa = null;
+    esconder();
+    player.frozen = false;
+  }
+  function final() {
+    player.frozen = true;
+    cartao('MANDOU BEM! 🎉', 'Você já sabe pular, pegar frutas e desviar. Agora é pra valer: cada fruta coletada devolve moedas para a sua carteira.', { botao: 'JOGAR DE VERDADE ➜' });
+  }
+  async function sair(pulou) {
+    $t('tut-botao').disabled = true;
+    try { await arena.concluirTutorial(pulou); } catch {}
+    location.replace('../lobby/');
+  }
+  $t('tut-botao').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!comecou) { comecou = true; esconder(); player.frozen = false; runStarted = true; document.body.classList.add('jogando'); enableAudio(); return; }
+    if (fim) sair(false);
+  });
+  $t('tut-pular').addEventListener('click', e => { e.stopPropagation(); sair(true); });
+  // boas-vindas: o jogo começa parado
+  player.frozen = true;
+  cartao('BEM-VINDO À ARENA!', 'Antes da primeira partida, um treino rápido (sem valer moedas): pular, pegar frutas e desviar.', { botao: 'COMEÇAR O TREINO ➜' });
+
+  // distância até o próximo buraco à frente (ou null)
+  const buracoAFrente = (ate = 700) => {
+    for (let d = 100; d <= ate; d += 25) { const g = player.guide(player.pos.z - d); if (g && g.pit) return d; }
+    return null;
+  };
+  return {
+    morreu() {
+      // renasce no começo do trecho: a lição em andamento recomeça
+      seguindo = null;
+      setTimeout(() => { if (!fim && !pausa) { const d = $t('tut-dica'); d.textContent = 'Quase! Tente de novo.'; d.hidden = false; setTimeout(() => { d.hidden = true; }, 1600); } }, 300);
+    },
+    quadro(x) {
+      if (!comecou || fim) return;
+      const p = player.pos;
+      // esperando o gesto certo
+      if (pausa) {
+        const ok = pausa.licao === 'pulo' ? jumpPressed
+          : pausa.licao === 'fruta' ? Math.sign(x) === pausa.lado && Math.abs(x) >= 0.25
+          : jumpPressed || Math.abs(x) >= 0.25;
+        if (ok) retomar();
+        return;
+      }
+      if (player.deadTimer > 0) return;
+      // lição em andamento: conta quando passa do obstáculo / pega a fruta
+      if (seguindo) {
+        const s = seguindo;
+        if (s.licao === 'pulo' && p.z < s.zFim && player.onGround) { seguindo = null; marcar('pulo'); }
+        else if (s.licao === 'fruta' && !s.alvo.alive) { seguindo = null; marcar('fruta'); }
+        else if (s.licao === 'fruta' && s.alvo.z > p.z + 150) seguindo = null; // passou sem pegar: a próxima fruta ensina de novo
+        else if (s.licao === 'desvio' && (s.alvo.state !== 'walk' || s.alvo.pos.z > p.z + 200)) { seguindo = null; marcar('desvio'); }
+        return;
+      }
+      // procura a próxima lição que ainda falta
+      const dp = buracoAFrente();
+      if (!feitas.has('pulo') && dp !== null && dp <= 290 && player.onGround) return pausar('pulo', { zFim: p.z - dp - 500 });
+      if (!feitas.has('fruta')) {
+        const f = pickups.filter(f => f.alive && f.z < p.z && p.z - f.z < 650).sort((a, b) => b.z - a.z)[0];
+        if (f) return pausar('fruta', { alvo: f, lado: f.x >= p.x ? 1 : -1 });
+      }
+      if (!feitas.has('desvio')) {
+        const e = enemies.find(e => e.state === 'walk' && e.pos.z < p.z && p.z - e.pos.z < 650 && Math.abs(e.pos.x - p.x) < 450);
+        if (e) return pausar('desvio', { alvo: e });
+      }
+      // parado num degrau/obstáculo: lembra do pulo (sem parar o jogo)
+      const parado = Math.abs(p.z - zAntes) < 0.5; zAntes = p.z;
+      if (parado && player.onGround) { if (!paradoDesde) paradoDesde = performance.now(); } else paradoDesde = 0;
+      // depois da lição, os próximos buracos e caranguejos só ganham um aviso (o jogo não para)
+      const dica = $t('tut-dica');
+      const caranguejo = enemies.some(e => e.state === 'walk' && e.pos.z < p.z && p.z - e.pos.z < 500 && Math.abs(e.pos.x - p.x) < 450);
+      let texto = '';
+      if (paradoDesde && performance.now() - paradoDesde > 700) texto = toque() ? 'Arraste para cima para pular o obstáculo' : 'Aperte ESPAÇO para pular o obstáculo';
+      else if (feitas.has('pulo') && dp !== null && dp <= 380) texto = toque() ? 'Buraco! Arraste para cima' : 'Buraco! Aperte ESPAÇO';
+      else if (feitas.has('desvio') && caranguejo) texto = toque() ? 'Caranguejo! Desvie ou pule' : 'Caranguejo! ← → ou ESPAÇO';
+      if (dica.textContent.startsWith('Quase') && !dica.hidden) return;
+      if (texto) dica.textContent = texto;
+      dica.hidden = !texto;
+    },
+  };
+})() : null;
 function formatTime(s) { return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`; }
 function showOverlay(title, lines) {
   document.getElementById('ov-title').textContent = title;
@@ -1656,10 +1835,11 @@ window.viewer.gravador = () => gravador;
 function quadro(dt) {
   if (mode === 'play') {
     const has = (...c) => c.some(k => keys.has(k));
+    const x = quantizarX((has('KeyD', 'ArrowRight') ? 1 : 0) - (has('KeyA', 'ArrowLeft') ? 1 : 0) + touch.x);
+    if (TUTORIAL) tutorial.quadro(x); // pode parar o jogo (lição) ou soltar (gesto certo)
     if (!player.frozen) {
       // passos fixos de 1/60 s (até 0,25 s por quadro, para não "pular" a corrida se a aba travar)
       acumulado = Math.min(acumulado + dt, 0.25);
-      const x = quantizarX((has('KeyD', 'ArrowRight') ? 1 : 0) - (has('KeyA', 'ArrowLeft') ? 1 : 0) + touch.x);
       const held = keys.has('Space') || touch.jumpHeld;
       while (acumulado >= SIM_DT) {
         const codigo = codificar({ x, jump: jumpPressed, jumpHeld: held });

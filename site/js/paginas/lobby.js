@@ -2,7 +2,9 @@
 import * as arena from '../arena.js';
 import { cabecalho, atualizarSaldoTopo, toast, quando, comSinal, ocupado } from './comum.js';
 
-await arena.exigirLogin('../');
+const eu = await arena.exigirLogin('../');
+// conta nova: antes da primeira partida de verdade, o tutorial (curto, sem dinheiro)
+if (eu.tutorialPendente) { location.replace('../jogar/?tutorial=1'); await new Promise(() => {}); }
 // partida que ficou aberta (página do jogo fechada): o servidor estorna ou encerra antes do lobby
 const pendente = await arena.resolverPartidaPendente().catch(() => null);
 await cabecalho({ ativo: 'lobby' });

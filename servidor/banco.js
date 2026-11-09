@@ -93,6 +93,8 @@ for (const sql of [
   'ALTER TABLE usuarios ADD COLUMN bonus_deposito INTEGER NOT NULL DEFAULT 0',
   // link de indicação pelo qual a conta foi criada (tabela indicacoes)
   'ALTER TABLE usuarios ADD COLUMN indicacao_id INTEGER',
+  // tutorial da primeira partida: contas que já existiam contam como feito; o cadastro grava 0
+  'ALTER TABLE usuarios ADD COLUMN tutorial_feito INTEGER NOT NULL DEFAULT 1',
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
 // Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado ou falha no envio = lançamento
 // 'estorno' devolve. processando = aprovado e enviado ao gateway, esperando a confirmação do Pix.

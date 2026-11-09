@@ -169,6 +169,7 @@ function usuarioDaSessao(req) {
 }
 const publico = u => ({
   id: u.id, nome: u.nome, email: u.email || '', visitante: !!u.visitante, operador: !!u.operador,
+  tutorialPendente: !u.tutorial_feito && !u.operador,
   ...(u.visitante ? {} : { doisFatoresAtivo: !!u.totp_ativo, sessaoComDoisFatores: !!u.dois_fatores }),
 });
 
@@ -394,7 +395,7 @@ rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   // link de indicação (?ref=CODIGO): só vale se existir e estiver ativo
   const ref = typeof corpo.ref === 'string' && /^[a-z0-9-]{3,32}$/i.test(corpo.ref)
     ? db.prepare('SELECT id FROM indicacoes WHERE codigo = ? AND ativo = 1').get(corpo.ref.toLowerCase()) : null;
-  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado, indicacao_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado, indicacao_id, tutorial_feito) VALUES (?, ?, ?, ?, ?, ?, ?, 0)')
     .run(nome, email, hashSenha(senha), corpo.nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1, ref ? ref.id : null);
   auditar('cadastro', { u: Number(r.lastInsertRowid), ip, ...(ref ? { detalhe: { indicacao: ref.id } } : {}) });
   if (CONFIRMAR_EMAIL) {
@@ -638,6 +639,12 @@ rota('GET', '/api/carteira', { login: true }, ({ u }) => ({
 }));
 // Pede um depósito: com a CajuPay configurada, gera o Pix (QR + copia e cola) e o saldo entra quando o pagamento
 // for confirmado; sem ela (testes no computador), o depósito simulado entra na hora.
+// Tutorial da primeira partida (só no navegador, sem dinheiro): marca como feito ao terminar ou pular.
+rota('POST', '/api/conta/tutorial', { login: true }, ({ u, corpo }) => {
+  db.prepare('UPDATE usuarios SET tutorial_feito = 1 WHERE id = ?').run(u.id);
+  auditar(corpo.pulou ? 'tutorial_pulado' : 'tutorial_feito', { u });
+  return { ok: true };
+});
 rota('POST', '/api/carteira/deposito', { login: true }, async ({ u, corpo, ip }) => {
   limitar(`carteira:${u.id}`, 20, 60e3);
   const v = centavos(corpo.valor);

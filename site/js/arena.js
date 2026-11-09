@@ -61,6 +61,7 @@ export async function exigirLogin(raiz = '../') {
 // ---------- carteira ----------
 export const LIMITE_MOVIMENTO = 10000 * 100;
 export const carteira = () => api('GET', '/carteira');                     // { saldo, movimentos }
+export const concluirTutorial = (pulou = false) => { eu = null; return api('POST', '/conta/tutorial', { pulou }); };
 export const depositar = valor => api('POST', '/carteira/deposito', { valor });
 export const consultarDeposito = id => api('GET', `/carteira/deposito/${Number(id)}`);
 // pix: { chaveTipo: 'cpf' | 'telefone', chave, documento } (CPF do titular, se a chave for telefone)
