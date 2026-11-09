@@ -5,7 +5,7 @@
 //   CAJUPAY_API_KEY      chave pública (gpk_...)
 //   CAJUPAY_API_SECRET   segredo (gsk_...)
 //   CAJUPAY_WEBHOOK_SECRET  segredo de assinatura do webhook (cwhsec_...). Sem ele, o servidor cadastra o webhook
-//                        sozinho ao subir e guarda o segredo em dados/cajupay-webhook-secret.txt.
+//                        sozinho ao subir e guarda o segredo em cajupay-webhook-secret.txt, na pasta do banco.
 //   CAJUPAY_SAQUE_AUTOMATICO=1  aprovar um saque no admin manda o Pix pela CajuPay (precisa de KYC aprovado
 //                        e escopo payouts.write). Sem isso, aprovar só dá baixa (o operador paga por fora).
 // Sem CAJUPAY_API_KEY/SECRET o site continua no modo simulado (depósito entra na hora, sem dinheiro de verdade).
@@ -13,7 +13,8 @@ const crypto = require('crypto'), fs = require('fs'), path = require('path');
 
 const BASE = (process.env.CAJUPAY_BASE_URL || 'https://api.cajupay.com.br').replace(/\/+$/, '');
 const CHAVE = process.env.CAJUPAY_API_KEY || '', SEGREDO = process.env.CAJUPAY_API_SECRET || '';
-const arqSegredoWebhook = path.join(__dirname, 'dados', 'cajupay-webhook-secret.txt');
+// junto do banco (em produção /opt/arena/dados, a única pasta em que o serviço pode escrever)
+const arqSegredoWebhook = path.join(path.dirname(require('./banco').arquivo), 'cajupay-webhook-secret.txt');
 
 const configurado = () => !!(CHAVE && SEGREDO);
 const saqueAutomatico = () => configurado() && process.env.CAJUPAY_SAQUE_AUTOMATICO === '1';
