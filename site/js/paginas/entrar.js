@@ -3,6 +3,15 @@
 import * as arena from '../arena.js';
 import { ocupado } from './comum.js';
 
+// link de indicação (/?ref=CODIGO): guarda por 30 dias para o cadastro, mesmo se a pessoa navegar antes
+const REF_CHAVE = 'arena-ref';
+const refUrl = new URLSearchParams(location.search).get('ref');
+if (refUrl && /^[a-z0-9-]{3,32}$/i.test(refUrl)) {
+  try { localStorage.setItem(REF_CHAVE, JSON.stringify({ ref: refUrl.toLowerCase(), ate: Date.now() + 30 * 864e5 })); } catch {}
+  arena.visitaIndicacao(refUrl.toLowerCase());
+}
+const refGuardado = () => { try { const r = JSON.parse(localStorage.getItem(REF_CHAVE) || 'null'); return r && r.ate > Date.now() ? r.ref : null; } catch { return null; } };
+
 if ((await arena.sessao()).usuario) location.replace('lobby/');
 
 const $ = id => document.getElementById(id);
@@ -72,7 +81,8 @@ $('auth').addEventListener('submit', e => {
         if ($('confirmar').value !== senha) return falhar('As senhas precisam ser iguais.', 'confirmar');
         if (!$('nascimento').value) return falhar('Informe sua data de nascimento.', 'nascimento');
         if (!$('maior18').checked) return falhar('Confirme que você tem 18 anos ou mais.', 'maior18');
-        const c = await arena.cadastrar({ nome: $('nome').value, email, senha, nascimento: $('nascimento').value });
+        const c = await arena.cadastrar({ nome: $('nome').value, email, senha, nascimento: $('nascimento').value, ref: refGuardado() });
+        try { localStorage.removeItem(REF_CHAVE); } catch {}
         if (!c.confirmar) { location.href = 'lobby/'; return; } // sem confirmação de e-mail: já entrou
         // servidor exigindo confirmação (ARENA_CONFIRMAR_EMAIL=1): a conta só entra depois do link
         trocarModo('entrar');
@@ -107,3 +117,6 @@ $('reenviar').addEventListener('click', e => ocupado(e.currentTarget, async () =
   try { const r = await arena.reenviarConfirmacao($('email').value.trim(), $('senha').value); avisar(r.mensagem); $('reenviar').hidden = true; }
   catch (err) { falhar(err.message); }
 }));
+
+// veio pelo link de indicação: abre direto em "Criar conta"
+if (refUrl) trocarModo('criar');

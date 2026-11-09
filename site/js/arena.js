@@ -38,7 +38,8 @@ export async function sessao(forcar = false) {
   return eu;
 }
 export const usuario = async () => (await sessao()).usuario;
-export async function cadastrar({ nome, email, senha, nascimento }) { eu = null; return api('POST', '/cadastro', { nome, email, senha, nascimento }); }
+export async function cadastrar({ nome, email, senha, nascimento, ref }) { eu = null; return api('POST', '/cadastro', { nome, email, senha, nascimento, ...(ref ? { ref } : {}) }); }
+export const visitaIndicacao = ref => api('POST', '/indicacao/visita', { ref }).catch(() => null);
 // Pode responder { precisa2fa: true, desafio } (conta com app autenticador): aí vem entrarComCodigo.
 export async function entrar({ email, senha }) { eu = null; return api('POST', '/login', { email, senha }); }
 export async function entrarComCodigo(desafio, codigo) { eu = null; return api('POST', '/login/2fa', { desafio, codigo }); }
@@ -92,6 +93,12 @@ export async function historicoPartidas() { return (await api('GET', '/partidas'
 export const salvarRegras = async r => normalize((await api('PUT', '/admin/regras', { regras: r })).regras);
 export const saquesAdmin = ({ estado = 'pendente', q = '', pagina = 1, por = 20 } = {}) =>
   api('GET', '/admin/saques?' + new URLSearchParams({ estado, q, pagina, por }));
+// links de indicação (operador)
+export const indicacoesAdmin = ({ q = '', tipo = '', pagina = 1, por = 20 } = {}) =>
+  api('GET', '/admin/indicacoes?' + new URLSearchParams({ q, tipo, pagina, por }));
+export const indicacaoAdmin = id => api('GET', `/admin/indicacoes/${Number(id)}`);
+export const criarIndicacao = dados => api('POST', '/admin/indicacoes', dados);
+export const ativarIndicacao = (id, ativo) => api('PATCH', `/admin/indicacoes/${Number(id)}`, { ativo });
 export const decidirSaque = (id, decisao, motivo = '') => api('POST', `/admin/saques/${Number(id)}`, { decisao, motivo });
 export const auditoria = () => api('GET', '/admin/auditoria');
 // usuários (operador: suporte)

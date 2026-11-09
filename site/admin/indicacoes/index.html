@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Arena · Indicações</title>
+<style>
+  :root { --bg: #0b1020; --panel: #151b30; --panel2: #0d1224; --line: rgba(255,255,255,0.1); --text: #e8ecf5; --muted: #9aa4bb; --accent: #ff9a3c; --ok: #6fdc8c; --bad: #ff7a7a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 48px; }
+  nav.admin { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  nav.admin a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); font-weight: 600; }
+  nav.admin a.on { color: #1a1006; background: var(--accent); border-color: var(--accent); }
+  h1 { margin: 0 0 4px; font-size: 24px; color: var(--accent); }
+  h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .sub { margin: 0 0 16px; color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .aviso-local { background: #3b2a06; border: 1px solid #ff9a3c; color: #ffd9a8; border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  #d-cards .card { background: var(--panel2); }
+  .card small { display: block; color: var(--muted); font-size: 12px; }
+  .card b { font-size: 19px; font-variant-numeric: tabular-nums; }
+  .card.destaque { border-color: var(--accent); }
+  .card.destaque b { color: var(--accent); }
+  input, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; font: inherit; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .novo { display: grid; grid-template-columns: 2fr 1.4fr 0.8fr 1.4fr auto; gap: 10px; align-items: end; }
+  .novo label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .filtros { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  input[type=search] { flex: 1 1 240px; min-width: 0; }
+  button { background: none; color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a1006; }
+  .tabela { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 9px 10px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th { background: #1b2240; color: var(--muted); font-size: 12px; font-weight: 600; }
+  td.n, th.n { text-align: right; }
+  tbody tr:last-child td { border-bottom: 0; }
+  #lista tbody tr[data-id] { cursor: pointer; }
+  #lista tbody tr[data-id]:hover, #lista tbody tr.sel { background: rgba(255,154,60,0.08); }
+  .mut { color: var(--muted); } .pos { color: var(--ok); } .neg { color: var(--bad); }
+  code { font-family: ui-monospace, Consolas, monospace; color: #ffd088; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; background: #2a3150; color: var(--muted); }
+  .tag.saque { background: #17304a; color: #a8d0ff; } .tag.perdas { background: #3b2a06; color: #ffd088; }
+  .tag.on { background: #173a24; color: var(--ok); } .tag.off { background: #3d1a1a; color: var(--bad); }
+  .paginacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-top: 10px; color: var(--muted); }
+  .paginacao div { display: flex; gap: 6px; align-items: center; }
+  .vazio { color: var(--muted); padding: 18px; text-align: center; }
+  .status { min-height: 20px; margin-top: 8px; color: var(--ok); }
+  .status.err { color: var(--bad); }
+  .det-topo { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .det-topo h2 { font-size: 20px; color: var(--text); text-transform: none; letter-spacing: 0; margin: 0 0 4px; }
+  .link-box { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0 2px; }
+  .link-box input { flex: 1 1 320px; font-family: ui-monospace, Consolas, monospace; }
+  .conta { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0 0 14px; }
+  .conta b { color: var(--accent); }
+  @media (max-width: 760px) { .novo { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav class="admin"><a href="../configuracoes/">Configurações</a><a href="../usuarios/">Usuários</a><a href="../saques/">Saques</a><a href="./" class="on">Indicações</a></nav>
+  <h1>Indicações</h1>
+  <div class="aviso-local" id="aviso-local" hidden><b>Modo local de teste:</b> aberto sem login porque o servidor foi iniciado com <code>--admin-local</code>. No site publicado continua exigindo o operador e o app autenticador.</div>
+  <p class="sub">Links para parceiros divulgarem. Quem cria a conta pelo link fica ligado a ele, e a comissão é calculada sobre esses jogadores: <b>Saques</b> = % do que foi sacado (saques pagos); <b>Perdas na plataforma</b> = % do que eles perderam jogando, descontados os bônus que receberam.</p>
+  <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador, entrando com o código do app autenticador, vê as indicações.</p><a href="../configuracoes/" style="color:var(--accent)">Ir para as configurações</a></section>
+
+  <div id="painel" hidden>
+    <div class="cards" id="geral"></div>
+    <section>
+      <h2>Novo link</h2>
+      <form class="novo" id="form-novo" autocomplete="off">
+        <label>De quem é o link<input id="n-nome" maxlength="60" placeholder="Ex.: João Influencer" required></label>
+        <label>Código (opcional)<input id="n-codigo" maxlength="32" placeholder="ex.: joao (gera sozinho)" pattern="[A-Za-z0-9-]{3,32}"></label>
+        <label>Porcentagem<input id="n-pct" inputmode="decimal" placeholder="10" required></label>
+        <label>Tipo<select id="n-tipo"><option value="perdas">Perdas na plataforma</option><option value="saque">Saques</option></select></label>
+        <button type="submit" class="primary">Criar link</button>
+      </form>
+      <div class="status" id="status-novo" role="status"></div>
+    </section>
+
+    <section>
+      <div class="filtros">
+        <input type="search" id="busca" placeholder="Buscar por nome ou código" aria-label="Buscar link" autocomplete="off">
+        <select id="f-tipo" aria-label="Tipo"><option value="">Todos os tipos</option><option value="perdas">Perdas na plataforma</option><option value="saque">Saques</option></select>
+        <select id="por" aria-label="Por página"><option>10</option><option selected>20</option><option>50</option><option>100</option></select>
+      </div>
+      <div class="tabela">
+        <table id="lista">
+          <thead><tr><th>Código</th><th>Parceiro</th><th>Tipo</th><th class="n">%</th><th class="n">Cliques</th><th class="n">Cadastros</th><th class="n">Depositado</th><th class="n">Base</th><th class="n">Comissão</th><th>Situação</th><th>Criado</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="paginacao">
+        <span id="contagem"></span>
+        <div><button type="button" id="ant">‹ Anterior</button><span id="pag"></span><button type="button" id="prox">Próxima ›</button></div>
+      </div>
+    </section>
+
+    <section id="detalhe" hidden>
+      <div class="det-topo">
+        <div><h2 id="d-titulo"></h2><span class="mut" id="d-sub"></span></div>
+        <div style="display:flex;gap:8px"><button type="button" id="d-ativo"></button><button type="button" id="d-fechar">Fechar ✕</button></div>
+      </div>
+      <div class="link-box"><input id="d-link" readonly aria-label="Link de indicação"><button type="button" class="primary" id="d-copiar">Copiar link</button></div>
+      <p class="mut" style="margin:0 0 14px;font-size:12px">Envie este link ao parceiro. Quem abrir e criar a conta em até 30 dias fica ligado a ele.</p>
+      <div class="cards" id="d-cards"></div>
+      <p class="conta" id="d-conta"></p>
+      <h2>Jogadores indicados</h2>
+      <div class="tabela"><table id="d-tabela"><thead><tr><th>ID</th><th>Nome</th><th>E-mail</th><th>Cadastro</th><th class="n">Depositado</th><th class="n">Bônus</th><th class="n">Sacado (pago)</th><th class="n">Resultado do jogador</th><th class="n">Saldo</th><th class="n">Partidas</th></tr></thead><tbody></tbody></table></div>
+      <div class="paginacao"><span id="d-contagem"></span><div><button type="button" id="d-ant">‹ Anterior</button><span id="d-pag"></span><button type="button" id="d-prox">Próxima ›</button></div></div>
+    </section>
+  </div>
+</main>
+<script type="module">
+import * as arena from '../../js/arena.js';
+
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const data = t => (t ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(t)) : '—');
+const brl = c => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c / 100);
+const sinal = c => `<span class="${c > 0 ? 'pos' : c < 0 ? 'neg' : 'mut'}">${c > 0 ? '+' : ''}${brl(c)}</span>`;
+const pct = p => `${String(p).replace('.', ',')}%`;
+const card = (rot, val, extra = '', cls = '') => `<div class="card ${cls}"><small>${rot}</small><b>${val}</b>${extra ? `<small>${extra}</small>` : ''}</div>`;
+// o link usa o endereço do site aberto agora (no publicado, https://arenacrash.com)
+const linkDe = l => `${location.origin}/?ref=${l.codigo}`;
+
+const local = await arena.adminLocal();
+const { usuario } = await arena.sessao().catch(() => ({}));
+if (local) $('aviso-local').hidden = false;
+const pode = local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores);
+if (!pode) {
+  $('sem-acesso').hidden = false;
+  if (usuario && !usuario.operador) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador.`;
+} else $('painel').hidden = false;
+
+// ---------- lista ----------
+const estado = { q: '', tipo: '', pagina: 1, por: 20 };
+let pedido = 0, selecionado = null;
+async function carregar() {
+  const n = ++pedido, tb = $('lista').querySelector('tbody');
+  try {
+    const r = await arena.indicacoesAdmin(estado);
+    if (n !== pedido) return;
+    estado.pagina = r.pagina;
+    $('geral').innerHTML = card('Links', r.geral.links) + card('Cadastros pelos links', r.geral.cadastros)
+      + card('Depositado pelos indicados', brl(r.geral.depositado)) + card('Comissão total (a pagar)', brl(r.geral.comissao), '', 'destaque');
+    tb.innerHTML = r.indicacoes.length ? r.indicacoes.map(l => `<tr data-id="${l.id}" class="${l.id === selecionado ? 'sel' : ''}">
+      <td><code>${esc(l.codigo)}</code></td><td>${esc(l.nome)}</td>
+      <td><span class="tag ${l.tipo}">${esc(l.tipoNome)}</span></td><td class="n">${pct(l.porcentagem)}</td>
+      <td class="n">${l.resumo.cliques}</td><td class="n">${l.resumo.cadastros}</td><td class="n">${brl(l.resumo.depositado)}</td>
+      <td class="n">${brl(l.resumo.base)}</td><td class="n"><b>${brl(l.resumo.comissao)}</b></td>
+      <td><span class="tag ${l.ativo ? 'on' : 'off'}">${l.ativo ? 'Ativo' : 'Desativado'}</span></td><td>${data(l.criado)}</td></tr>`).join('')
+      : `<tr><td colspan="11" class="vazio">${estado.q || estado.tipo ? 'Nenhum link encontrado.' : 'Nenhum link ainda. Crie o primeiro acima.'}</td></tr>`;
+    $('contagem').textContent = r.total ? `${(r.pagina - 1) * r.por + 1}–${Math.min(r.total, r.pagina * r.por)} de ${r.total}` : '';
+    $('pag').textContent = `Página ${r.pagina} de ${r.paginas}`;
+    $('ant').disabled = r.pagina <= 1; $('prox').disabled = r.pagina >= r.paginas;
+  } catch (err) { tb.innerHTML = `<tr><td colspan="11" class="vazio">${esc(err.message)}</td></tr>`; }
+}
+let t;
+$('busca').addEventListener('input', e => { clearTimeout(t); t = setTimeout(() => { estado.q = e.target.value.trim(); estado.pagina = 1; carregar(); }, 250); });
+$('f-tipo').addEventListener('change', e => { estado.tipo = e.target.value; estado.pagina = 1; carregar(); });
+$('por').addEventListener('change', e => { estado.por = Number(e.target.value); estado.pagina = 1; carregar(); });
+$('ant').addEventListener('click', () => { estado.pagina--; carregar(); });
+$('prox').addEventListener('click', () => { estado.pagina++; carregar(); });
+$('lista').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) abrir(Number(tr.dataset.id)); });
+
+// ---------- novo link ----------
+const dizerNovo = (m, erro = false) => { $('status-novo').textContent = m; $('status-novo').classList.toggle('err', erro); };
+$('form-novo').addEventListener('submit', async e => {
+  e.preventDefault();
+  dizerNovo('');
+  const btn = e.submitter; if (btn) btn.disabled = true;
+  try {
+    const { indicacao } = await arena.criarIndicacao({ nome: $('n-nome').value, codigo: $('n-codigo').value, porcentagem: $('n-pct').value, tipo: $('n-tipo').value });
+    $('n-nome').value = ''; $('n-codigo').value = ''; $('n-pct').value = '';
+    dizerNovo(`Link criado: ${linkDe(indicacao)}`);
+    await carregar();
+    abrir(indicacao.id);
+  } catch (err) { dizerNovo(err.message, true); }
+  if (btn) btn.disabled = false;
+});
+
+// ---------- detalhe ----------
+let det = null, dPagina = 1;
+const D_POR = 20;
+async function abrir(id) {
+  selecionado = id;
+  history.replaceState(null, '', `#l=${id}`);
+  document.querySelectorAll('#lista tr[data-id]').forEach(tr => tr.classList.toggle('sel', Number(tr.dataset.id) === id));
+  try { det = await arena.indicacaoAdmin(id); } catch (err) { $('detalhe').hidden = false; $('d-titulo').textContent = err.message; return; }
+  dPagina = 1;
+  mostrar();
+  $('detalhe').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function mostrar() {
+  const l = det.indicacao, r = l.resumo;
+  $('detalhe').hidden = false;
+  $('d-titulo').innerHTML = `${esc(l.nome)} <code>${esc(l.codigo)}</code>`;
+  $('d-sub').innerHTML = `<span class="tag ${l.tipo}">${esc(l.tipoNome)}</span> · ${pct(l.porcentagem)} · criado em ${data(l.criado)} · <span class="tag ${l.ativo ? 'on' : 'off'}">${l.ativo ? 'Ativo' : 'Desativado'}</span>`;
+  $('d-ativo').textContent = l.ativo ? 'Desativar link' : 'Reativar link';
+  $('d-link').value = linkDe(l);
+  $('d-cards').innerHTML = card('Cliques no link', r.cliques, r.conversao != null ? `${String(r.conversao).replace('.', ',')}% viraram cadastro` : '')
+    + card('Cadastros', r.cadastros, `${r.depositantes} depositaram`)
+    + card('Depositado', brl(r.depositado), `+ ${brl(r.bonus)} de bônus`)
+    + card('Sacado (pago)', brl(r.sacado), r.saquePendente ? `${brl(r.saquePendente)} esperando aprovação` : '')
+    + card('Lucro da casa com eles', sinal(r.lucroCasa), `${r.partidas} partidas`)
+    + card('Saldo nas carteiras', brl(r.saldos))
+    + card('Base da comissão', brl(r.base), l.tipo === 'saque' ? 'saques pagos' : 'perdas − bônus')
+    + card('Comissão', brl(r.comissao), `${pct(l.porcentagem)} da base`, 'destaque');
+  $('d-conta').innerHTML = l.tipo === 'saque'
+    ? `Comissão = ${pct(l.porcentagem)} × saques pagos aos indicados (${brl(r.sacado)}) = <b>${brl(r.comissao)}</b>.`
+    : `Comissão = ${pct(l.porcentagem)} × (lucro da casa ${brl(r.lucroCasa)} − bônus dados ${brl(r.bonus)} = ${brl(r.base)}) = <b>${brl(r.comissao)}</b>. Se os indicados estiverem ganhando, a base fica em zero.`;
+  desenharUsuarios();
+}
+function desenharUsuarios() {
+  const todos = det.usuarios, pags = Math.max(1, Math.ceil(todos.length / D_POR));
+  dPagina = Math.min(Math.max(1, dPagina), pags);
+  $('d-tabela').querySelector('tbody').innerHTML = todos.length ? todos.slice((dPagina - 1) * D_POR, dPagina * D_POR).map(u => `<tr>
+    <td class="mut"><a href="../usuarios/#u=${u.id}" style="color:inherit">#${u.id}</a></td><td>${esc(u.nome)}</td><td>${esc(u.email) || '—'}</td><td>${data(u.criado)}</td>
+    <td class="n">${brl(u.depositado)}</td><td class="n">${brl(u.bonus)}</td><td class="n">${brl(u.sacado)}</td>
+    <td class="n">${sinal(u.resultado)}</td><td class="n">${brl(u.saldo)}</td><td class="n">${u.partidas}</td></tr>`).join('')
+    : '<tr><td colspan="10" class="vazio">Ninguém se cadastrou por este link ainda.</td></tr>';
+  $('d-contagem').textContent = todos.length ? `${(dPagina - 1) * D_POR + 1}–${Math.min(todos.length, dPagina * D_POR)} de ${todos.length}` : '';
+  $('d-pag').textContent = `Página ${dPagina} de ${pags}`;
+  $('d-ant').disabled = dPagina <= 1; $('d-prox').disabled = dPagina >= pags;
+}
+$('d-ant').addEventListener('click', () => { dPagina--; desenharUsuarios(); });
+$('d-prox').addEventListener('click', () => { dPagina++; desenharUsuarios(); });
+$('d-fechar').addEventListener('click', () => { $('detalhe').hidden = true; selecionado = null; history.replaceState(null, '', location.pathname); carregar(); });
+$('d-copiar').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('d-link').value); } catch { $('d-link').select(); document.execCommand('copy'); }
+  $('d-copiar').textContent = 'Copiado ✓'; setTimeout(() => { $('d-copiar').textContent = 'Copiar link'; }, 1500);
+});
+$('d-ativo').addEventListener('click', async () => {
+  const l = det.indicacao;
+  if (l.ativo && !confirm(`Desativar o link ${l.codigo}? Novos cadastros por ele deixam de contar (os que já entraram continuam ligados).`)) return;
+  try { await arena.ativarIndicacao(l.id, !l.ativo); det = await arena.indicacaoAdmin(l.id); mostrar(); carregar(); }
+  catch (err) { alert(err.message); }
+});
+
+if (pode) {
+  await carregar();
+  const h = /^#l=(\d+)$/.exec(location.hash);
+  if (h) abrir(Number(h[1]));
+}
+</script>
+</body>
+</html>

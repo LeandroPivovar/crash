@@ -91,6 +91,8 @@ for (const sql of [
   'ALTER TABLE usuarios ADD COLUMN email_confirmado INTEGER NOT NULL DEFAULT 1',
   // bônus de boas-vindas (depositar R$ 5 e ganhar + R$ 10) já usado: 1 vez por conta
   'ALTER TABLE usuarios ADD COLUMN bonus_deposito INTEGER NOT NULL DEFAULT 0',
+  // link de indicação pelo qual a conta foi criada (tabela indicacoes)
+  'ALTER TABLE usuarios ADD COLUMN indicacao_id INTEGER',
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
 // Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado ou falha no envio = lançamento
 // 'estorno' devolve. processando = aprovado e enviado ao gateway, esperando a confirmação do Pix.
@@ -140,6 +142,20 @@ CREATE TABLE IF NOT EXISTS depositos (
 );
 CREATE INDEX IF NOT EXISTS depositos_usuario ON depositos(usuario_id, id);
 CREATE INDEX IF NOT EXISTS depositos_estado ON depositos(estado, criado);
+-- Links de indicação (operador): quem se cadastra por /?ref=CODIGO fica ligado ao link. A comissão é
+-- calculada sobre os indicados: % dos saques pagos (tipo saque) ou % das perdas na plataforma (tipo perdas).
+CREATE TABLE IF NOT EXISTS indicacoes (
+  id          INTEGER PRIMARY KEY,
+  codigo      TEXT NOT NULL UNIQUE,
+  nome        TEXT NOT NULL,            -- de quem é o link (parceiro, influenciador…)
+  tipo        TEXT NOT NULL CHECK (tipo IN ('saque','perdas')),
+  porcentagem REAL NOT NULL CHECK (porcentagem > 0 AND porcentagem <= 100),
+  ativo       INTEGER NOT NULL DEFAULT 1,
+  cliques     INTEGER NOT NULL DEFAULT 0,
+  criado      INTEGER NOT NULL,
+  operador_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS usuarios_indicacao ON usuarios(indicacao_id);
 -- Promoções de depósito já usadas (cada uma vale 1 vez por conta): valor do depósito que deu o bônus.
 CREATE TABLE IF NOT EXISTS bonus_usados (
   usuario_id  INTEGER NOT NULL REFERENCES usuarios(id),

@@ -311,6 +311,49 @@ try {
   conferir('suporte não aceita senha fraca nem e-mail repetido', (await op('PATCH', `/api/admin/usuarios/${euBo.id}`, { novaSenha: '123' })).s === 400
     && (await op('PATCH', `/api/admin/usuarios/${euBo.id}`, { email: (await bc('GET', '/api/eu')).j.usuario.email })).s === 409);
 
+  console.log('--- links de indicação');
+  conferir('jogador não cria nem vê links', (await bc('POST', '/api/admin/indicacoes', { nome: 'Eu', porcentagem: 50, tipo: 'saque' })).s === 403
+    && (await bc('GET', '/api/admin/indicacoes')).s === 403 && (await cliente()('GET', '/api/admin/indicacoes')).s === 401);
+  conferir('link com porcentagem inválida', (await op('POST', '/api/admin/indicacoes', { nome: 'X', porcentagem: 0, tipo: 'saque' })).s === 400
+    && (await op('POST', '/api/admin/indicacoes', { nome: 'X', porcentagem: 101, tipo: 'saque' })).s === 400);
+  conferir('link com tipo ou código inválido', (await op('POST', '/api/admin/indicacoes', { nome: 'X', porcentagem: 5, tipo: 'deposito' })).s === 400
+    && (await op('POST', '/api/admin/indicacoes', { nome: 'X', porcentagem: 5, tipo: 'saque', codigo: "a'; DROP" })).s === 400);
+  const codP = `parc${Date.now() % 100000}`;
+  const lP = (await op('POST', '/api/admin/indicacoes', { nome: 'Parceiro Perdas', codigo: codP, porcentagem: '10', tipo: 'perdas' })).j.indicacao;
+  const lS = (await op('POST', '/api/admin/indicacoes', { nome: 'Zé dos Saques', porcentagem: 20, tipo: 'saque' })).j.indicacao;
+  conferir('cria links (código escolhido e gerado)', lP?.codigo === codP && lP.link.endsWith(`/?ref=${codP}`) && /^ze-dos-saques-[0-9a-f]{4}$/.test(lS?.codigo || ''), lS?.codigo);
+  conferir('código repetido', (await op('POST', '/api/admin/indicacoes', { nome: 'Outro', codigo: codP, porcentagem: 5, tipo: 'saque' })).s === 409);
+  await cliente()('POST', '/api/indicacao/visita', { ref: codP }); await cliente()('POST', '/api/indicacao/visita', { ref: codP });
+  const cadRef = async (nome, ref) => { const c = cliente(); await c('POST', '/api/cadastro', { nome, email: `${nome.toLowerCase()}${Date.now()}@x.com`, senha: 'senha-boa-123', nascimento: '1990-05-05', ref }); return c; };
+  const ind1 = await cadRef('Indicado', codP.toUpperCase());
+  await cadRef('Fantasma', 'nao-existe');
+  const ind1Id = await idDe(ind1);
+  const linkado = dbTeste.prepare('SELECT indicacao_id FROM usuarios WHERE id = ?').get(ind1Id).indicacao_id;
+  conferir('cadastro pelo link fica ligado; código inexistente não', linkado === lP.id && dbTeste.prepare("SELECT COUNT(*) AS n FROM usuarios WHERE nome = 'Fantasma' AND indicacao_id IS NOT NULL").get().n === 0);
+  // indicado deposita R$ 25 (fica com R$ 100) e perde R$ 40: lucro 40 − bônus 75 → base 0
+  await ind1('POST', '/api/carteira/deposito', { valor: 2500 });
+  const perdeu = async (c, v) => dbTeste.prepare("INSERT INTO movimentos (usuario_id, tipo, valor, descricao, criado) VALUES (?, 'entrada', ?, 'Entrada (teste)', ?)").run(await idDe(c), -v, Date.now());
+  await perdeu(ind1, 4000);
+  let rP = (await op('GET', `/api/admin/indicacoes/${lP.id}`)).j;
+  conferir('perdas menores que o bônus: comissão zero', rP.indicacao.resumo.lucroCasa === 4000 && rP.indicacao.resumo.base === 0 && rP.indicacao.resumo.comissao === 0 && rP.indicacao.resumo.cliques === 1,
+    `cliques ${rP.indicacao.resumo.cliques}, base ${rP.indicacao.resumo.base}`);
+  await perdeu(ind1, 6000);
+  rP = (await op('GET', `/api/admin/indicacoes/${lP.id}`)).j;
+  conferir('comissão sobre perdas: 10% × (100 − 75 de bônus) = R$ 2,50', rP.indicacao.resumo.base === 2500 && rP.indicacao.resumo.comissao === 250 && rP.usuarios.length === 1 && rP.usuarios[0].id === ind1Id
+    && !JSON.stringify(rP).includes('senha_hash'));
+  const ind2 = await cadRef('Sacador', lS.codigo);
+  await creditar(ind2, 5000);
+  dbTeste.prepare("INSERT INTO saques (usuario_id, valor, estado, criado) VALUES (?, 2000, 'aprovado', ?)").run(await idDe(ind2), Date.now());
+  dbTeste.prepare("INSERT INTO saques (usuario_id, valor, estado, criado) VALUES (?, 1000, 'pendente', ?)").run(await idDe(ind2), Date.now());
+  const rS = (await op('GET', `/api/admin/indicacoes/${lS.id}`)).j.indicacao.resumo;
+  conferir('comissão sobre saques: 20% dos saques pagos (pendente não conta)', rS.sacado === 2000 && rS.saquePendente === 1000 && rS.comissao === 400);
+  const busca = (await op('GET', `/api/admin/indicacoes?q=${encodeURIComponent('%')}`)).j;
+  const pagIdx = (await op('GET', '/api/admin/indicacoes?tipo=saque&por=5')).j;
+  conferir('busca e filtro da lista de links', busca.total === 0 && pagIdx.indicacoes.every(l => l.tipo === 'saque') && pagIdx.indicacoes.some(l => l.id === lS.id));
+  await op('PATCH', `/api/admin/indicacoes/${lS.id}`, { ativo: false });
+  const ind3 = await cadRef('Tarde', lS.codigo);
+  conferir('link desativado não liga cadastros novos', dbTeste.prepare('SELECT indicacao_id FROM usuarios WHERE id = ?').get(await idDe(ind3)).indicacao_id === null);
+
   console.log('--- fluxo de partidas');
   // posição 1 = muito fácil (0), posição 2 = impossível (100), o resto = regras gerais
   await op('PUT', '/api/admin/regras', { regras: { fluxo: [0, 100] } });

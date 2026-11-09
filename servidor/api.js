@@ -391,8 +391,12 @@ rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   if (!(a >= 0 && a < 130)) throw new Erro(400, 'Informe sua data de nascimento.');
   if (a < IDADE_MIN) { auditar('cadastro_menor', { ip }); throw new Erro(403, 'O Crash Arena é só para maiores de 18 anos.'); }
   if (db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new Erro(409, 'Já existe uma conta com esse e-mail.');
-  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado) VALUES (?, ?, ?, ?, ?, ?)').run(nome, email, hashSenha(senha), corpo.nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1);
-  auditar('cadastro', { u: Number(r.lastInsertRowid), ip });
+  // link de indicação (?ref=CODIGO): só vale se existir e estiver ativo
+  const ref = typeof corpo.ref === 'string' && /^[a-z0-9-]{3,32}$/i.test(corpo.ref)
+    ? db.prepare('SELECT id FROM indicacoes WHERE codigo = ? AND ativo = 1').get(corpo.ref.toLowerCase()) : null;
+  const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado, indicacao_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(nome, email, hashSenha(senha), corpo.nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1, ref ? ref.id : null);
+  auditar('cadastro', { u: Number(r.lastInsertRowid), ip, ...(ref ? { detalhe: { indicacao: ref.id } } : {}) });
   if (CONFIRMAR_EMAIL) {
     // a conta só entra depois de confirmar o e-mail (link enviado agora)
     enviarConfirmacao(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(r.lastInsertRowid), req);
@@ -1021,6 +1025,101 @@ setInterval(async () => {
     try { await conferirDeposito(d); } catch (e) { console.error('[cajupay] consulta', d.id, e.message); }
   }
 }, 2 * 60e3).unref();
+// ---------- links de indicação (operador) ----------
+// Comissão do link, sobre as contas criadas por ele:
+//   saque  → % do total de saques pagos aos indicados;
+//   perdas → % do que os indicados perderam jogando (lucro da casa com eles), descontados os bônus que receberam.
+const TIPOS_INDICACAO = { saque: 'Saques', perdas: 'Perdas na plataforma' };
+const SOMA_JOGO = "(m.tipo IN ('entrada','premio') OR (m.tipo = 'estorno' AND m.partida_id IS NOT NULL))";
+function resumoIndicacao(l) {
+  const r = db.prepare(`SELECT COUNT(*) AS cadastros,
+      COALESCE(SUM(EXISTS (SELECT 1 FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositantes,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositado,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%')), 0) AS bonus,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND ${SOMA_JOGO})), 0) AS resultado,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id)), 0) AS saldos,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM saques s WHERE s.usuario_id = u.id AND s.estado = 'aprovado')), 0) AS sacado,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM saques s WHERE s.usuario_id = u.id AND s.estado IN ('pendente','processando'))), 0) AS saquePendente,
+      COALESCE(SUM((SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado = 'encerrada')), 0) AS partidas
+    FROM usuarios u WHERE u.indicacao_id = ?`).get(l.id);
+  const lucroCasa = -r.resultado;
+  const base = l.tipo === 'saque' ? r.sacado : Math.max(0, lucroCasa - r.bonus);
+  return {
+    cliques: l.cliques, cadastros: r.cadastros, depositantes: r.depositantes, depositado: r.depositado, bonus: r.bonus,
+    sacado: r.sacado, saquePendente: r.saquePendente, saldos: r.saldos, partidas: r.partidas, lucroCasa,
+    base, comissao: Math.round(base * l.porcentagem / 100),
+    conversao: l.cliques ? Math.round(r.cadastros / l.cliques * 1000) / 10 : null,
+  };
+}
+const indicacaoPublica = l => ({
+  id: l.id, codigo: l.codigo, nome: l.nome, tipo: l.tipo, tipoNome: TIPOS_INDICACAO[l.tipo], porcentagem: l.porcentagem,
+  ativo: !!l.ativo, criado: l.criado, link: `${SITE_URL || ''}/?ref=${l.codigo}`, resumo: resumoIndicacao(l),
+});
+rota('GET', '/api/admin/indicacoes', { operador: true }, ({ req }) => {
+  const q = consulta(req);
+  const busca = String(q.get('q') || '').trim().slice(0, 120);
+  const por = Math.min(100, Math.max(5, Number(q.get('por')) || 20));
+  const pagina = Math.max(1, Math.floor(Number(q.get('pagina')) || 1));
+  const tipo = TIPOS_INDICACAO[q.get('tipo')] ? q.get('tipo') : null;
+  const like = `%${busca.replace(/[\\%_]/g, c => '\\' + c)}%`;
+  const onde = "(? = '' OR l.codigo LIKE ? ESCAPE '\\' OR l.nome LIKE ? ESCAPE '\\') AND (? IS NULL OR l.tipo = ?)";
+  const args = [busca, like, like, tipo, tipo];
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM indicacoes l WHERE ${onde}`).get(...args).n;
+  const lista = db.prepare(`SELECT * FROM indicacoes l WHERE ${onde} ORDER BY l.id DESC LIMIT ? OFFSET ?`).all(...args, por, (pagina - 1) * por).map(indicacaoPublica);
+  const todos = db.prepare('SELECT * FROM indicacoes').all().map(l => resumoIndicacao(l));
+  return {
+    total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)), indicacoes: lista,
+    geral: { links: todos.length, cadastros: todos.reduce((s, r) => s + r.cadastros, 0), comissao: todos.reduce((s, r) => s + r.comissao, 0), depositado: todos.reduce((s, r) => s + r.depositado, 0) },
+  };
+});
+rota('POST', '/api/admin/indicacoes', { operador: true }, ({ corpo, u, ip }) => {
+  limitar(`admin-indicacao:${u.id}`, 30, 60e3);
+  const nome = texto(corpo.nome, 60);
+  if (!nome) throw new Erro(400, 'Informe de quem é o link (nome do parceiro).');
+  if (!TIPOS_INDICACAO[corpo.tipo]) throw new Erro(400, 'Escolha o tipo: saque ou perdas na plataforma.');
+  const pct = Math.round(Number(String(corpo.porcentagem ?? '').replace(',', '.')) * 100) / 100;
+  if (!(pct > 0 && pct <= 100)) throw new Erro(400, 'A porcentagem precisa ser maior que 0 e no máximo 100.');
+  let codigo = String(corpo.codigo || '').trim().toLowerCase();
+  if (codigo) {
+    if (!/^[a-z0-9-]{3,32}$/.test(codigo)) throw new Erro(400, 'O código do link usa só letras, números e hífen (3 a 32).');
+    if (db.prepare('SELECT 1 FROM indicacoes WHERE codigo = ?').get(codigo)) throw new Erro(409, 'Esse código já existe. Escolha outro.');
+  } else {
+    // nome-em-minúsculas + 4 letras aleatórias (ex.: joao-k3f9)
+    const raiz = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'link';
+    do codigo = `${raiz}-${crypto.randomBytes(3).toString('hex').slice(0, 4)}`; while (db.prepare('SELECT 1 FROM indicacoes WHERE codigo = ?').get(codigo));
+  }
+  const id = Number(db.prepare('INSERT INTO indicacoes (codigo, nome, tipo, porcentagem, criado, operador_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(codigo, nome, corpo.tipo, pct, agora(), u.id).lastInsertRowid);
+  auditar('indicacao_criada', { u, ip, detalhe: { id, codigo, tipo: corpo.tipo, porcentagem: pct } });
+  return { indicacao: indicacaoPublica(db.prepare('SELECT * FROM indicacoes WHERE id = ?').get(id)) };
+});
+rota('GET', '/api/admin/indicacoes/(\\d{1,12})', { operador: true }, ({ m }) => {
+  const l = db.prepare('SELECT * FROM indicacoes WHERE id = ?').get(Number(m[1]));
+  if (!l) throw new Erro(404, 'Link não encontrado.');
+  const usuarios = db.prepare(`SELECT u.*, ${SOMAS_USUARIO},
+      COALESCE((SELECT SUM(valor) FROM saques s WHERE s.usuario_id = u.id AND s.estado = 'aprovado'), 0) AS sacado_pago
+    FROM usuarios u WHERE u.indicacao_id = ? ORDER BY u.id DESC LIMIT 5000`).all(l.id)
+    .map(r => ({ ...usuarioResumo(r), sacado: r.sacado_pago }));
+  return { indicacao: indicacaoPublica(l), usuarios };
+});
+rota('PATCH', '/api/admin/indicacoes/(\\d{1,12})', { operador: true }, ({ m, corpo, u, ip }) => {
+  const l = db.prepare('SELECT * FROM indicacoes WHERE id = ?').get(Number(m[1]));
+  if (!l) throw new Erro(404, 'Link não encontrado.');
+  if (typeof corpo.ativo !== 'boolean') throw new Erro(400, 'Nada para mudar.');
+  db.prepare('UPDATE indicacoes SET ativo = ? WHERE id = ?').run(corpo.ativo ? 1 : 0, l.id);
+  auditar(corpo.ativo ? 'indicacao_ativada' : 'indicacao_desativada', { u, ip, detalhe: { id: l.id, codigo: l.codigo } });
+  return { indicacao: indicacaoPublica(db.prepare('SELECT * FROM indicacoes WHERE id = ?').get(l.id)) };
+});
+// Visita pelo link (conta cliques): no máximo 1 por hora por endereço e link.
+rota('POST', '/api/indicacao/visita', {}, ({ corpo, ip }) => {
+  const codigo = typeof corpo.ref === 'string' ? corpo.ref.toLowerCase() : '';
+  if (!/^[a-z0-9-]{3,32}$/.test(codigo)) return { ok: false };
+  const l = db.prepare('SELECT id FROM indicacoes WHERE codigo = ? AND ativo = 1').get(codigo);
+  if (!l) return { ok: false };
+  try { limitar(`visita:${ip}:${codigo}`, 1, 3600e3); } catch { return { ok: true }; }
+  db.prepare('UPDATE indicacoes SET cliques = cliques + 1 WHERE id = ?').run(l.id);
+  return { ok: true };
+});
 // ---------- usuários (operador: suporte) ----------
 // Somas por jogador vindas do livro-razão. "resultado" = o que o jogador ganhou ou perdeu jogando
 // (entradas + frutas + estornos); o lucro da casa com ele é o contrário.
@@ -1029,7 +1128,7 @@ const SOMAS_USUARIO = `
   COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%'), 0) AS depositado,
   COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%'), 0) AS bonus,
   COALESCE((SELECT -SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'saque'), 0) AS sacado,
-  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo IN ('entrada','premio','estorno')), 0) AS resultado,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND (m.tipo IN ('entrada','premio') OR (m.tipo = 'estorno' AND m.partida_id IS NOT NULL))), 0) AS resultado,
   (SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado <> 'cancelada') AS partidas,
   (SELECT MAX(criada) FROM partidas p WHERE p.usuario_id = u.id) AS ultima_partida`;
 const ORDENS_USUARIO = {
@@ -1063,7 +1162,7 @@ rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
   const total = db.prepare(`SELECT COUNT(*) AS n FROM usuarios u WHERE ${onde}`).get(...args).n;
   const linhas = db.prepare(`SELECT u.*, ${SOMAS_USUARIO} FROM usuarios u WHERE ${onde} ORDER BY ${ordem} LIMIT ? OFFSET ?`).all(...args, por, (pagina - 1) * por);
   const geral = db.prepare(`SELECT COUNT(*) AS contas,
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE tipo IN ('entrada','premio','estorno')), 0) AS resultado,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL)), 0) AS resultado,
       COALESCE((SELECT SUM(valor) FROM movimentos), 0) AS saldos FROM usuarios`).get();
   return {
     total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)),
