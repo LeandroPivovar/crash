@@ -76,7 +76,9 @@ export { valorDasFrutas } from './jogo/config.js';
 // ---------- partida ----------
 // estado: criada (entrada paga, tela START) → jogando → encerrada | cancelada
 export const partidaAberta = async () => (await api('GET', '/partida')).partida;
-export const iniciarPartida = async entrada => (await api('POST', '/partidas', { entrada })).partida;
+// carteira: 'real' (saldo de verdade) ou 'treino' (depósito simulado; não vira saque)
+export const iniciarPartida = async (entrada, carteira = 'real') => (await api('POST', '/partidas', { entrada, carteira })).partida;
+export const simularDeposito = valor => api('POST', '/carteira/simular', { valor });
 export const comecarPartida = id => api('POST', `/partidas/${id}/comecar`);
 export const cancelarPartida = id => api('POST', `/partidas/${id}/cancelar`, {}, { manter: true });
 // Fim da corrida: manda a gravação inteira dos comandos (rle) — o servidor refaz a corrida e decide as

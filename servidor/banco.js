@@ -95,6 +95,10 @@ for (const sql of [
   'ALTER TABLE usuarios ADD COLUMN indicacao_id INTEGER',
   // tutorial da primeira partida: contas que já existiam contam como feito; o cadastro grava 0
   'ALTER TABLE usuarios ADD COLUMN tutorial_feito INTEGER NOT NULL DEFAULT 1',
+  // Duas carteiras: 'real' (Pix, pode sacar) e 'treino' (depósito simulado; o que entra e o que se ganha jogando
+  // com ele fica no treino e nunca vai para o saque). Tudo o que já existia é real.
+  "ALTER TABLE movimentos ADD COLUMN carteira TEXT NOT NULL DEFAULT 'real' CHECK (carteira IN ('real','treino'))",
+  "ALTER TABLE partidas ADD COLUMN carteira TEXT NOT NULL DEFAULT 'real' CHECK (carteira IN ('real','treino'))",
 ]) { try { db.exec(sql); } catch { /* coluna já existe */ } }
 // Pedidos de saque: o valor já saiu do saldo (lançamento 'saque'); recusado ou falha no envio = lançamento
 // 'estorno' devolve. processando = aprovado e enviado ao gateway, esperando a confirmação do Pix.
@@ -192,9 +196,11 @@ CREATE TRIGGER IF NOT EXISTS movimentos_sem_update BEFORE UPDATE ON movimentos
 BEGIN SELECT RAISE(ABORT, 'movimentos são imutáveis'); END;
 CREATE TRIGGER IF NOT EXISTS movimentos_sem_delete BEFORE DELETE ON movimentos
 BEGIN SELECT RAISE(ABORT, 'movimentos são imutáveis'); END;
--- E nenhum lançamento pode deixar o saldo negativo (segunda trava, além da conferência no código).
-CREATE TRIGGER IF NOT EXISTS movimentos_saldo_nao_negativo AFTER INSERT ON movimentos
-WHEN (SELECT COALESCE(SUM(valor), 0) FROM movimentos WHERE usuario_id = NEW.usuario_id) < 0
+-- E nenhum lançamento pode deixar o saldo negativo, em cada carteira (segunda trava, além da conferência no
+-- código): o treino não cobre a carteira real nem o contrário.
+DROP TRIGGER IF EXISTS movimentos_saldo_nao_negativo;
+CREATE TRIGGER movimentos_saldo_nao_negativo AFTER INSERT ON movimentos
+WHEN (SELECT COALESCE(SUM(valor), 0) FROM movimentos WHERE usuario_id = NEW.usuario_id AND carteira = NEW.carteira) < 0
 BEGIN SELECT RAISE(ABORT, 'saldo negativo'); END;
 `);
 

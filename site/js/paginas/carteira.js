@@ -22,6 +22,8 @@ async function render() {
   carteira = await arena.carteira();
   const c = carteira;
   $('saldo').textContent = arena.moedas(c.saldo);
+  $('saldo-treino').textContent = arena.moedas(c.saldoTreino || 0);
+  $('saldo-treino-box').hidden = !(c.saldoTreino > 0);
   atualizarSaldoTopo(c.saldo);
   // valores de depósito, com o selo das promoções que a conta ainda pode usar
   $('valores').innerHTML = c.valoresDeposito.map(v => {
@@ -38,7 +40,7 @@ async function render() {
     ? `🔒 Para sacar, jogue antes o valor que entrou na carteira: faltam <b>${real(r.falta)}</b> em partidas (jogado ${real(r.jogado)} de ${real(r.depositado)}).`
     : '✓ Saque liberado: você já jogou o valor depositado.';
   $('movimentos').innerHTML = c.movimentos.length
-    ? c.movimentos.map(m => `<li><span>${NOMES[m.tipo] || esc(m.tipo)}<small>${esc(m.descricao)} · ${quando(m.quando)}</small></span>${comSinal(m.valor)}</li>`).join('')
+    ? c.movimentos.map(m => `<li><span>${m.carteira === 'treino' ? '🎮 ' : ''}${NOMES[m.tipo] || esc(m.tipo)}<small>${esc(m.descricao)} · ${quando(m.quando)}</small></span>${comSinal(m.valor)}</li>`).join('')
     : '<li class="vazio">Nenhum movimento ainda.</li>';
   const saques = c.saques || [];
   $('saques-box').hidden = !saques.length;
@@ -148,6 +150,19 @@ $('dlg-copiar').addEventListener('click', async () => {
   toast('Código Pix copiado. Cole no app do seu banco.');
 });
 document.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => { $('confirmar').close(); render(); }));
+
+// ---------- depósito simulado (treino) ----------
+$('simular').addEventListener('click', e => ocupado(e.currentTarget, async () => {
+  erro.textContent = '';
+  const v = arena.paraCentavos($('simular-valor').value);
+  if (!(v >= 50) || v > 100000) { erro.textContent = 'Simule um valor entre R$ 0,50 e R$ 1.000.'; $('simular-valor').focus(); return; }
+  try {
+    await arena.simularDeposito(v);
+    $('simular-valor').value = '';
+    toast(`Depósito simulado de ${brl(v)} no saldo de treino. Bom treino! 🎮`);
+    await render();
+  } catch (err) { erro.textContent = err.message; }
+}));
 
 // ---------- saque ----------
 document.querySelectorAll('[data-fechar-saque]').forEach(b => b.addEventListener('click', () => $('dlg-saque').close()));

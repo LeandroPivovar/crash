@@ -21,7 +21,12 @@
     <p>Você contra a ilha. Cada fruta coletada devolve moedas para a sua carteira.</p>
     <div class="match-detail"><span>Mapa</span><strong>N. Sanity Beach</strong></div>
     <div class="match-detail"><span>Vidas</span><strong>1</strong></div>
-    <div class="match-detail"><span>Seu saldo</span><strong class="num">✦ <span id="saldo">0,00</span></strong></div>
+    <div class="tabs" role="tablist" id="carteiras" style="margin:14px 0 4px">
+      <button type="button" class="selected" data-carteira="real" role="tab" aria-selected="true">Valendo</button>
+      <button type="button" data-carteira="treino" role="tab" aria-selected="false">Treino</button>
+    </div>
+    <p class="note" id="nota-carteira" hidden style="margin:6px 0 0">Treino usa o saldo do depósito simulado: o que você ganhar fica no treino e não pode ser sacado.</p>
+    <div class="match-detail"><span id="rotulo-saldo">Seu saldo</span><strong class="num">✦ <span id="saldo">0,00</span></strong></div>
     <form id="form-entrada" class="stake" novalidate>
       <label for="entrada">VALOR DE ENTRADA (MOEDAS)</label>
       <div class="field"><span>✦</span><input id="entrada" inputmode="decimal" autocomplete="off" placeholder="0,00"></div>

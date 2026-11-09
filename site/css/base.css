@@ -86,6 +86,14 @@ input::placeholder { color: #766c87; }
 .pix-girando { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid #ffb84e55; border-top-color: #ffb84e; animation: girar 0.9s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 .pix-pago { background: #16301f; border: 1px solid #3fa76a66; color: #bff0cf; border-radius: 8px; padding: 12px; font-weight: 700; }
+.saldo-treino { margin: -6px 0 14px; font-size: 13px; color: #d4cbdf; }
+.saldo-treino b { color: #9fe0ff; }
+.saldo-treino small { color: #8e809e; font-size: 11px; }
+.simular { margin: 14px 0 4px; padding: 12px; border: 1px dashed #73558199; border-radius: 10px; }
+.simular small { display: block; margin-top: 6px; color: #8e809e; font-size: 11px; line-height: 1.4; }
+.simular-linha { display: flex; gap: 8px; align-items: stretch; }
+.simular-linha .field { flex: 1; margin: 0; }
+.simular-linha .secondary { width: auto; margin: 0; padding: 0 16px; }
 .bonus-aviso { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #ffb84e66; border-radius: 8px; background: #ffb84e14; color: #ffe2b0; font-size: 12px; }
 .check { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 12px; color: #d4cbdf; cursor: pointer; }
 .check input { width: 16px; height: 16px; padding: 0; accent-color: #ffa63b; }

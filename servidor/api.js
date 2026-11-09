@@ -199,9 +199,11 @@ function conferirSegundoFator(u, codigo) {
 const novosCodigosReserva = () => Array.from({ length: 8 }, () => crypto.randomBytes(8).toString('base64url').replace(/[^a-z0-9]/gi, '').toLowerCase().padEnd(10, '7').slice(0, 10));
 
 // ---------- carteira ----------
-const saldo = uid => db.prepare('SELECT COALESCE(SUM(valor), 0) AS s FROM movimentos WHERE usuario_id = ?').get(uid).s;
-const lancar = (uid, tipo, valor, descricao, partidaId = null) =>
-  db.prepare('INSERT INTO movimentos (usuario_id, tipo, valor, descricao, partida_id, criado) VALUES (?, ?, ?, ?, ?, ?)').run(uid, tipo, valor, descricao, partidaId, agora());
+// Duas carteiras: 'real' (Pix; só ela entra em saque, comissão e lucro) e 'treino' (depósito simulado; o que se
+// ganha jogando com ela volta para ela).
+const saldo = (uid, carteira = 'real') => db.prepare('SELECT COALESCE(SUM(valor), 0) AS s FROM movimentos WHERE usuario_id = ? AND carteira = ?').get(uid, carteira).s;
+const lancar = (uid, tipo, valor, descricao, partidaId = null, carteira = 'real') =>
+  db.prepare('INSERT INTO movimentos (usuario_id, tipo, valor, descricao, partida_id, criado, carteira) VALUES (?, ?, ?, ?, ?, ?, ?)').run(uid, tipo, valor, descricao, partidaId, agora(), carteira);
 const moedas = c => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ---------- regras e partidas ----------
@@ -214,7 +216,7 @@ const valorPorFruta = (entrada, regras) => Math.round(entrada * regras.fruitPerc
 // quanto as frutas valem na partida (com limiar de ganho, as frutas depois dele valem o do nível novo)
 const valorFrutasDa = p => cfg.valorDasFrutas(p.entrada, cfg.normalize(JSON.parse(p.regras)), p.frutas || 0);
 const partidaPublica = (p, { comSemente = true } = {}) => p && ({
-  id: p.id, modo: p.modo, entrada: p.entrada, ...(comSemente ? { semente: p.semente } : {}), regras: JSON.parse(p.regras), estado: p.estado,
+  id: p.id, modo: p.modo, carteira: p.carteira || 'real', entrada: p.entrada, ...(comSemente ? { semente: p.semente } : {}), regras: JSON.parse(p.regras), estado: p.estado,
   criada: p.criada, comecou: p.comecou, encerrada: p.encerrada,
   frutas: p.frutas, distancia: p.distancia, tempoMs: p.tempo_ms, porFruta: p.por_fruta, recebido: p.recebido,
   resultado: p.recebido == null ? null : p.recebido - p.entrada,
@@ -344,7 +346,7 @@ function finalizar(id, r, tempoMs) {
   const l = regras.limiar, passou = l && f > l.frutas;
   if (recebido > 0) lancar(p.usuario_id, 'premio', recebido, passou
     ? `Frutas · ${l.frutas} × ${moedas(porFruta)} + ${f - l.frutas} × ${moedas(valorPorFruta(p.entrada, l.depois))} (após o limiar)`
-    : `Frutas · ${f} × ${moedas(porFruta)}`, p.id);
+    : `Frutas · ${f} × ${moedas(porFruta)}`, p.id, p.carteira);
   db.prepare(`UPDATE partidas SET estado = 'encerrada', encerrada = ?, frutas = ?, distancia = ?, tempo_ms = ?, por_fruta = ?,
       recebido = ?, verificacao = ?, analise = ?, motivo_analise = ?, sinais = ? WHERE id = ?`)
     .run(agora(), f, r ? r.distancia : 0, Math.max(0, Math.min(DURACAO_MAX_MS, Math.round(Number(tempoMs) || 0))), porFruta, recebido, verificacao,
@@ -362,7 +364,7 @@ async function encerrarComReplay(p, tempoMs) {
   return transacao(() => finalizar(p.id, r, tempoMs));
 }
 function cancelar(p) {
-  lancar(p.usuario_id, 'estorno', p.entrada, 'Partida cancelada antes do início', p.id);
+  lancar(p.usuario_id, 'estorno', p.entrada, 'Partida cancelada antes do início', p.id, p.carteira);
   db.prepare("UPDATE partidas SET estado = 'cancelada', encerrada = ? WHERE id = ?").run(agora(), p.id);
 }
 // Partida que ficou aberta (página fechada): antes do START é estornada; durante, o servidor refaz a corrida
@@ -462,7 +464,7 @@ rota('POST', '/api/sair', {}, ({ req, res }) => {
   res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
   return { ok: true };
 });
-rota('GET', '/api/eu', {}, ({ u }) => (u ? { usuario: publico(u), saldo: saldo(u.id) } : { usuario: null }));
+rota('GET', '/api/eu', {}, ({ u }) => (u ? { usuario: publico(u), saldo: saldo(u.id), saldoTreino: saldo(u.id, 'treino') } : { usuario: null }));
 rota('PATCH', '/api/eu', { login: true }, ({ u, corpo, ip, req }) => {
   limitar(`perfil:${u.id}`, 10, 10 * 60e3);
   const nome = texto(corpo.nome, 30), email = texto(corpo.email, 120).toLowerCase();
@@ -590,9 +592,9 @@ const promocoesDisponiveis = uid => {
 // por depósito, bônus incluído. Ex.: depositou R$ 5 sem bônus → precisa ter jogado R$ 5.
 function rodada(uid) {
   const r = db.prepare(`SELECT
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'deposito'), 0) AS depositado,
-      COALESCE((SELECT -SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'entrada'), 0)
-        - COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND tipo = 'estorno' AND partida_id IS NOT NULL), 0) AS jogado`).get(uid, uid, uid);
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND carteira = 'real' AND tipo = 'deposito'), 0) AS depositado,
+      COALESCE((SELECT -SUM(valor) FROM movimentos WHERE usuario_id = ? AND carteira = 'real' AND tipo = 'entrada'), 0)
+        - COALESCE((SELECT SUM(valor) FROM movimentos WHERE usuario_id = ? AND carteira = 'real' AND tipo = 'estorno' AND partida_id IS NOT NULL), 0) AS jogado`).get(uid, uid, uid);
   return { depositado: r.depositado, jogado: r.jogado, falta: Math.max(0, r.depositado - r.jogado) };
 }
 const depositoPublico = d => d && ({
@@ -629,13 +631,14 @@ async function conferirDeposito(d) {
 }
 rota('GET', '/api/carteira', { login: true }, ({ u }) => ({
   saldo: saldo(u.id),
+  saldoTreino: saldo(u.id, 'treino'),
   valoresDeposito: VALORES_DEPOSITO,
   promocoes: promocoesDisponiveis(u.id),
   rodada: rodada(u.id),
   pixReal: caju.configurado(),
   saques: db.prepare('SELECT * FROM saques WHERE usuario_id = ? ORDER BY id DESC LIMIT 50').all(u.id).map(saquePublico),
   depositos: db.prepare('SELECT * FROM depositos WHERE usuario_id = ? ORDER BY id DESC LIMIT 20').all(u.id).map(depositoPublico),
-  movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(u.id),
+  movimentos: db.prepare('SELECT tipo, valor, descricao, carteira, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(u.id),
 }));
 // Pede um depósito: com a CajuPay configurada, gera o Pix (QR + copia e cola) e o saldo entra quando o pagamento
 // for confirmado; sem ela (testes no computador), o depósito simulado entra na hora.
@@ -672,6 +675,15 @@ rota('POST', '/api/carteira/deposito', { login: true }, async ({ u, corpo, ip })
     .run(String(p.payment_id), String(p.pix_copy_paste || ''), String(p.pix_qr_code || '').slice(0, 200000), id);
   auditar('deposito_pix_gerado', { u, ip, detalhe: { deposito: id, valor: v } });
   return { deposito: depositoPublico(db.prepare('SELECT * FROM depositos WHERE id = ?').get(id)) };
+});
+// Depósito simulado (treino): qualquer valor a partir de R$ 0,50, entra na hora na carteira de treino. Não é
+// dinheiro: não pode ser sacado, nem o que for ganho jogando com ele (as partidas de treino pagam no treino).
+rota('POST', '/api/carteira/simular', { login: true }, ({ u, corpo }) => {
+  limitar(`simular:${u.id}`, 20, 60e3);
+  const v = centavos(corpo.valor);
+  if (v < 50 || v > 100000) throw new Erro(400, 'Simule um valor entre R$ 0,50 e R$ 1.000.');
+  lancar(u.id, 'deposito', v, 'Depósito simulado (treino)', null, 'treino');
+  return { saldoTreino: saldo(u.id, 'treino'), saldo: saldo(u.id) };
 });
 // A página do QR pergunta se o Pix já foi pago (e o servidor confere na CajuPay, no máximo a cada 5 s).
 rota('GET', '/api/carteira/deposito/(\\d{1,12})', { login: true }, async ({ u, m }) => {
@@ -749,27 +761,31 @@ rota('GET', '/api/partidas', { login: true }, ({ u }) => ({
 rota('GET', '/api/resultado', { login: true }, ({ u }) => ({
   partida: partidaPublica(db.prepare("SELECT * FROM partidas WHERE usuario_id = ? AND estado = 'encerrada' ORDER BY encerrada DESC LIMIT 1").get(u.id)),
   saldo: saldo(u.id),
+  saldoTreino: saldo(u.id, 'treino'),
 }));
 rota('POST', '/api/partidas', { login: true }, async ({ u, corpo }) => {
   limitar(`nova-partida:${u.id}`, 20, 60e3, 'Muitas partidas seguidas. Espere um pouco.');
   await resolverPendente(u.id);
   return transacao(() => {
     if (partidaAberta(u.id)) throw new Erro(409, 'Você já tem uma partida aberta.');
+    const carteira = corpo.carteira === 'treino' ? 'treino' : 'real';
     const entrada = centavos(corpo.entrada);
-    if (entrada < ENTRADA_MIN) throw new Erro(400, 'A entrada mínima é 1 moeda.');
+    const minimo = carteira === 'treino' ? 50 : ENTRADA_MIN;
+    if (entrada < minimo) throw new Erro(400, carteira === 'treino' ? 'A entrada mínima no treino é 0,50 moeda.' : 'A entrada mínima é 1 moeda.');
     if (entrada > ENTRADA_MAX) throw new Erro(400, 'A entrada máxima é 10.000 moedas.');
-    if (entrada > saldo(u.id)) throw new Erro(400, 'Saldo insuficiente para essa entrada.');
+    if (entrada > saldo(u.id, carteira)) throw new Erro(400, carteira === 'treino' ? 'Saldo de treino insuficiente. Simule um depósito na carteira.' : 'Saldo insuficiente para essa entrada.');
     const id = 'p_' + crypto.randomBytes(12).toString('base64url');
     const semente = crypto.randomInt(0, 2 ** 31);
     // fluxo de partidas: a N-ª partida do jogador (sem contar as canceladas antes do START) usa a dificuldade da
     // posição N do fluxo; depois da última, recomeça. As regras ficam congeladas na partida (o replay usa estas).
-    const feitas = db.prepare("SELECT COUNT(*) AS n FROM partidas WHERE usuario_id = ? AND estado <> 'cancelada'").get(u.id).n;
+    // (só partidas reais contam: o treino usa a posição da próxima partida real, sem avançar o fluxo)
+    const feitas = db.prepare("SELECT COUNT(*) AS n FROM partidas WHERE usuario_id = ? AND estado <> 'cancelada' AND carteira = 'real'").get(u.id).n;
     const posicao = feitas % cfg.FLUXO_TAM;
     const regras = { ...cfg.regrasNoFluxo(regrasAtuais(), posicao), fluxoPosicao: posicao + 1 };
-    db.prepare("INSERT INTO partidas (id, usuario_id, entrada, semente, regras, estado, criada) VALUES (?, ?, ?, ?, ?, 'criada', ?)")
-      .run(id, u.id, entrada, semente, JSON.stringify(regras), agora());
-    lancar(u.id, 'entrada', -entrada, 'Entrada · Desafio solo', id);
-    return { partida: partidaPublica(db.prepare('SELECT * FROM partidas WHERE id = ?').get(id)), saldo: saldo(u.id) };
+    db.prepare("INSERT INTO partidas (id, usuario_id, entrada, semente, regras, estado, criada, carteira) VALUES (?, ?, ?, ?, ?, 'criada', ?, ?)")
+      .run(id, u.id, entrada, semente, JSON.stringify(regras), agora(), carteira);
+    lancar(u.id, 'entrada', -entrada, carteira === 'treino' ? 'Entrada · Treino' : 'Entrada · Desafio solo', id, carteira);
+    return { partida: partidaPublica(db.prepare('SELECT * FROM partidas WHERE id = ?').get(id)), saldo: saldo(u.id), saldoTreino: saldo(u.id, 'treino') };
   });
 });
 rota('POST', '/api/partidas/([\\w-]+)/comecar', { login: true }, ({ u, m }) => {
@@ -1040,11 +1056,11 @@ const TIPOS_INDICACAO = { saque: 'Saques', perdas: 'Perdas na plataforma' };
 const SOMA_JOGO = "(m.tipo IN ('entrada','premio') OR (m.tipo = 'estorno' AND m.partida_id IS NOT NULL))";
 function resumoIndicacao(l) {
   const r = db.prepare(`SELECT COUNT(*) AS cadastros,
-      COALESCE(SUM(EXISTS (SELECT 1 FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositantes,
-      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositado,
-      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%')), 0) AS bonus,
-      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND ${SOMA_JOGO})), 0) AS resultado,
-      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id)), 0) AS saldos,
+      COALESCE(SUM(EXISTS (SELECT 1 FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositantes,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%')), 0) AS depositado,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%')), 0) AS bonus,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND ${SOMA_JOGO})), 0) AS resultado,
+      COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real')), 0) AS saldos,
       COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM saques s WHERE s.usuario_id = u.id AND s.estado = 'aprovado')), 0) AS sacado,
       COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM saques s WHERE s.usuario_id = u.id AND s.estado IN ('pendente','processando'))), 0) AS saquePendente,
       COALESCE(SUM((SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado = 'encerrada')), 0) AS partidas
@@ -1131,12 +1147,12 @@ rota('POST', '/api/indicacao/visita', {}, ({ corpo, ip }) => {
 // Somas por jogador vindas do livro-razão. "resultado" = o que o jogador ganhou ou perdeu jogando
 // (entradas + frutas + estornos); o lucro da casa com ele é o contrário.
 const SOMAS_USUARIO = `
-  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id), 0) AS saldo,
-  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%'), 0) AS depositado,
-  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%'), 0) AS bonus,
-  COALESCE((SELECT -SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.tipo = 'saque'), 0) AS sacado,
-  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND (m.tipo IN ('entrada','premio') OR (m.tipo = 'estorno' AND m.partida_id IS NOT NULL))), 0) AS resultado,
-  (SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado <> 'cancelada') AS partidas,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real'), 0) AS saldo,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'deposito' AND m.descricao NOT LIKE 'Bônus%'), 0) AS depositado,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'deposito' AND m.descricao LIKE 'Bônus%'), 0) AS bonus,
+  COALESCE((SELECT -SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND m.tipo = 'saque'), 0) AS sacado,
+  COALESCE((SELECT SUM(valor) FROM movimentos m WHERE m.usuario_id = u.id AND m.carteira = 'real' AND (m.tipo IN ('entrada','premio') OR (m.tipo = 'estorno' AND m.partida_id IS NOT NULL))), 0) AS resultado,
+  (SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado <> 'cancelada' AND p.carteira = 'real') AS partidas,
   (SELECT MAX(criada) FROM partidas p WHERE p.usuario_id = u.id) AS ultima_partida`;
 const ORDENS_USUARIO = {
   recentes: 'u.id DESC', antigos: 'u.id ASC', saldo: 'saldo DESC, u.id DESC', resultado: 'resultado DESC, u.id DESC',
@@ -1169,8 +1185,8 @@ rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
   const total = db.prepare(`SELECT COUNT(*) AS n FROM usuarios u WHERE ${onde}`).get(...args).n;
   const linhas = db.prepare(`SELECT u.*, ${SOMAS_USUARIO} FROM usuarios u WHERE ${onde} ORDER BY ${ordem} LIMIT ? OFFSET ?`).all(...args, por, (pagina - 1) * por);
   const geral = db.prepare(`SELECT COUNT(*) AS contas,
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL)), 0) AS resultado,
-      COALESCE((SELECT SUM(valor) FROM movimentos), 0) AS saldos FROM usuarios`).get();
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND (tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL))), 0) AS resultado,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real'), 0) AS saldos FROM usuarios`).get();
   return {
     total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)),
     usuarios: linhas.map(usuarioResumo),
@@ -1213,7 +1229,7 @@ function detalheUsuario(id) {
     estatisticas: est,
     ciclo: cicloDe(r.partidas, regrasAtuais()),
     partidas,
-    movimentos: db.prepare('SELECT tipo, valor, descricao, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 2000').all(r.id),
+    movimentos: db.prepare('SELECT tipo, valor, descricao, carteira, partida_id AS partida, criado AS quando FROM movimentos WHERE usuario_id = ? ORDER BY id DESC LIMIT 2000').all(r.id),
     eventos: db.prepare('SELECT quando, ip, evento, detalhe FROM auditoria WHERE usuario_id = ? ORDER BY id DESC LIMIT 200').all(r.id),
   };
 }

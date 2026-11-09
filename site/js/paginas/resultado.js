@@ -6,13 +6,14 @@ await arena.exigirLogin('../');
 await arena.resolverPartidaPendente().catch(() => null);
 await cabecalho({});
 
-const { partida: r, saldo } = await arena.ultimoResultado();
+const { partida: r, saldo, saldoTreino } = await arena.ultimoResultado();
 if (!r) location.replace('../lobby/');
 else mostrar(r);
 
 function mostrar(r) {
   const $ = id => document.getElementById(id);
-  $('quando').textContent = `Partida de ${quando(r.encerrada)}`;
+  const treino = r.carteira === 'treino';
+  $('quando').textContent = `${treino ? 'Treino' : 'Partida'} de ${quando(r.encerrada)}${treino ? ' · saldo de treino (não pode ser sacado)' : ''}`;
   $('r-entrada').textContent = arena.moedas(r.entrada);
   const l = r.regras?.limiar;
   $('r-frutas').textContent = l && r.frutas > l.frutas
@@ -23,7 +24,7 @@ function mostrar(r) {
   $('r-saldo-final').className = 'saldo-final ' + (r.resultado > 0 ? 'gain' : r.resultado < 0 ? 'loss' : 'even');
   $('r-rotulo').textContent = r.resultado > 0 ? 'Lucro' : r.resultado < 0 ? 'Prejuízo' : 'Empate';
   $('r-diferenca').textContent = `${r.resultado > 0 ? '+ ' : r.resultado < 0 ? '− ' : ''}✦ ${arena.moedas(Math.abs(r.resultado))}`;
-  $('r-carteira').textContent = arena.moedas(saldo);
+  $('r-carteira').textContent = arena.moedas(treino ? (saldoTreino || 0) : saldo);
   // o servidor refaz a corrida com os comandos gravados e paga as frutas que ele confirma
   const v = $('r-verificacao');
   const TEXTO = {
