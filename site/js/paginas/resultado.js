@@ -47,6 +47,6 @@ function mostrar(r) {
   deNovo.innerHTML = `JOGAR DE NOVO · ✦ ${arena.moedas(r.entrada)} <b>➜</b>`;
   deNovo.addEventListener('click', () => ocupado(deNovo, async () => {
     try { await arena.iniciarPartida(r.entrada); location.href = '../jogar/'; }
-    catch (err) { $('erro').textContent = err.message === 'Saldo insuficiente para essa entrada.' ? 'Saldo insuficiente para repetir essa entrada. Deposite na carteira ou escolha outro valor no lobby.' : err.message; }
+    catch (err) { $('erro').textContent = err.message === 'Saldo insuficiente para essa entrada.' ? 'Saldo insuficiente para repetir essa entrada. Deposite na carteira ou escolha outro valor no início.' : err.message; }
   }));
 }

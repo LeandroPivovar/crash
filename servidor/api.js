@@ -173,7 +173,7 @@ const publico = u => ({
   ...(u.visitante ? {} : { doisFatoresAtivo: !!u.totp_ativo, sessaoComDoisFatores: !!u.dois_fatores }),
 });
 
-// ---------- segundo fator (app autenticador; obrigatório para o operador e para sacar) ----------
+// ---------- segundo fator (app autenticador; obrigatório para o operador) ----------
 const totp = require('./totp');
 const desafios = new Map(); // token do desafio (login com senha certa, esperando o código) → { uid, ate, tentativas }
 function conferirSegundoFator(u, codigo) {
@@ -719,23 +719,13 @@ function chavePix(corpo) {
   if (!cpfValido(documento)) throw new Erro(400, 'Informe o CPF do titular da chave (o dono da conta que vai receber).');
   return { tipo, chave, documento };
 }
-// Sacar exige o app autenticador ativo e o código dele (ou de reserva) em cada saque: quem roubar a senha
-// ou a sessão não tira o dinheiro. O valor sai do saldo na hora e o pedido espera o operador aprovar.
+// O valor sai do saldo na hora e o pedido espera o operador aprovar.
 rota('POST', '/api/carteira/saque', { login: true }, ({ u, corpo, ip }) => {
   limitar(`carteira:${u.id}`, 20, 60e3);
   if (u.visitante) throw new Erro(403, 'Visitantes não podem sacar. Crie uma conta para sacar.');
-  if (!u.totp_ativo) throw new Erro(403, 'Para sacar, ative a verificação em duas etapas em Minha conta.', 'configurar_2fa');
   const r0 = rodada(u.id);
   if (r0.falta > 0) throw new Erro(403, `Para sacar, jogue antes o valor que entrou na carteira: faltam ${moedasBrl(r0.falta)} em partidas.`, 'rodada');
   const pix = chavePix(corpo);
-  if (!corpo.codigo) throw new Erro(401, 'Digite o código do app autenticador.', 'precisa_codigo');
-  limitar(`saque-codigo:${u.id}`, 10, 15 * 60e3, 'Muitas tentativas de código. Espere 15 minutos.');
-  if (!conferirSegundoFator(u, corpo.codigo)) {
-    // cada código do app vale uma vez: dois saques seguidos precisam esperar o próximo (até 30 s)
-    if (totp.conferir(u.totp_segredo, corpo.codigo) !== null) throw new Erro(401, 'Esse código já foi usado. Espere o próximo código do app (até 30 s).', 'precisa_codigo');
-    auditar('saque_codigo_errado', { u, ip });
-    throw new Erro(401, 'Código incorreto.', 'precisa_codigo');
-  }
   return transacao(() => {
     const v = centavos(corpo.valor);
     if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
@@ -858,7 +848,7 @@ rota('POST', '/api/partidas/([\\w-]+)/encerrar', { login: true, corpoMax: CORPO_
   return { partida: partidaPublica(fim), saldo: saldo(u.id) };
 });
 
-// Ativar o app autenticador (obrigatório para o operador antes de qualquer ação e para o jogador sacar).
+// Ativar o app autenticador (obrigatório para o operador antes de qualquer ação).
 // 1) iniciar: confirma a senha, gera o segredo (ainda inativo) e devolve o link otpauth:// para o app;
 // 2) confirmar: digita o código do app; ativa e devolve 8 códigos de reserva (mostrados uma vez).
 // As mesmas funções atendem /api/admin/2fa/* (página do operador) e /api/conta/2fa/* (jogador).

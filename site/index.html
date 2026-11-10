@@ -10,7 +10,7 @@
 <body class="pg-entrar">
 <main>
   <section class="hero">
-    <img class="logo-hero" src="img/plataforma/logo-arena-crush.png" alt="Arena Crush" width="390" height="201">
+    <img class="logo-hero" src="img/plataforma/logo-arena-crush.png" alt="Arena Crash" width="1754" height="897">
     <h1>ENTRE NA ILHA.<br>DOMINE A <em>DISPUTA.</em></h1>
   </section>
   <section class="panel" aria-labelledby="titulo">
@@ -23,39 +23,37 @@
     <form id="auth" novalidate>
       <div data-so="criar" hidden>
         <label for="nome">NOME DO JOGADOR</label>
-        <div class="field"><span>♙</span><input id="nome" maxlength="30" placeholder="Como quer ser chamado?" autocomplete="nickname"></div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/person.svg" alt=""><input id="nome" maxlength="30" placeholder="Como quer ser chamado?" autocomplete="nickname"></div>
       </div>
       <div data-so="entrar criar recuperar">
         <label for="email">SEU E-MAIL</label>
-        <div class="field"><span>✉</span><input id="email" type="email" placeholder="player@email.com" autocomplete="email" required></div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/envelope.svg" alt=""><input id="email" type="email" placeholder="player@email.com" autocomplete="email" required></div>
       </div>
       <div data-so="codigo" hidden>
         <label for="codigo">CÓDIGO DO APP AUTENTICADOR</label>
-        <div class="field"><span>⚿</span><input id="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="6 dígitos (ou um código de reserva)"></div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/shield-lock.svg" alt=""><input id="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="6 dígitos (ou um código de reserva)"></div>
       </div>
-      <div class="senhas">
       <div data-so="entrar criar">
         <label for="senha">SUA SENHA</label>
-        <div class="field"><span>◇</span><input id="senha" type="password" minlength="8" placeholder="Pelo menos 8 caracteres" autocomplete="current-password"><button type="button" class="eye" aria-label="Mostrar senha">◉</button></div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/lock.svg" alt=""><input id="senha" type="password" minlength="8" placeholder="Pelo menos 8 caracteres" autocomplete="current-password"><button type="button" class="eye" aria-label="Mostrar senha"><img class="auth-icon" src="img/bootstrap-icons/eye.svg" alt=""></button></div>
       </div>
       <div data-so="criar" hidden>
         <label for="confirmar">CONFIRMAR SENHA</label>
-        <div class="field"><span>◇</span><input id="confirmar" type="password" minlength="8" placeholder="Repita sua senha" autocomplete="new-password"></div>
-      </div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/lock.svg" alt=""><input id="confirmar" type="password" minlength="8" placeholder="Repita sua senha" autocomplete="new-password"></div>
       </div>
       <div data-so="criar" hidden>
         <label for="nascimento">DATA DE NASCIMENTO</label>
-        <div class="field"><span>◷</span><input id="nascimento" type="date" autocomplete="bday"></div>
+        <div class="field"><img class="auth-icon" src="img/bootstrap-icons/calendar-event.svg" alt=""><input id="nascimento" type="date" autocomplete="bday"></div>
       </div>
       <div class="options" data-so="entrar"><button type="button" class="text-btn" id="esqueci">Esqueci minha senha</button></div>
       <p class="erro" id="erro" role="alert"></p>
       <p class="note" id="aviso" hidden></p>
       <button type="button" class="secondary" id="reenviar" hidden style="margin-bottom:12px">Reenviar link de confirmação</button>
       <label class="check" data-so="criar" hidden><input type="checkbox" id="maior18"> Tenho 18 anos ou mais</label>
-      <button class="primary" id="enviar">ENTRAR NO LOBBY <b>➜</b></button>
+      <button class="primary" id="enviar">Entrar</button>
+      <p class="note" data-so="criar" hidden>Ao criar uma conta, você concorda com os Termos de Uso.</p>
       <button type="button" class="text-btn" id="voltar-login" data-so="recuperar" hidden style="margin-top:14px">← Voltar para o login</button>
     </form>
-    <p class="note" data-so="entrar recuperar codigo">Protótipo: as moedas são simuladas, nenhum dinheiro é movimentado.</p>
   </section>
 </main>
 <script type="module" src="js/paginas/entrar.js"></script>

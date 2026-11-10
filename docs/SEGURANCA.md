@@ -47,7 +47,7 @@ O que o navegador manda e o servidor **ignora para pagar**: número de frutas, d
 
 **Jogadores: verificação em duas etapas e saque:**
 - Qualquer conta (não visitante) ativa o app autenticador em **Minha conta** (senha → chave → código → 8 códigos de reserva). Com o app ativo, o login pede o código depois da senha.
-- **Sacar exige o app ativo e o código em cada saque.** Quem descobrir a senha ou roubar a sessão não tira as moedas. Cada código vale uma vez (dois saques seguidos esperam o próximo código, até 30 s). Até 10 códigos por 15 min.
+- **Sacar exige sessão de jogador e chave Pix válida.** O pedido reserva o valor e aguarda aprovação do operador. O código do app autenticador não é exigido no pedido.
 - Desligar o app pede a senha e um código.
 
 **Contas:**

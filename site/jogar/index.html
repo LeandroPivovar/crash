@@ -66,7 +66,7 @@
   #carregando[hidden] { display: none; }
   .load-card { width: min(420px, 100%); background: linear-gradient(140deg, #2b1c3beb, #1a1428f5); border: 1px solid #ffffff20; border-radius: 24px;
     padding: 30px; text-align: center; box-shadow: 0 22px 70px #08041266; color: #fff; font-family: Inter, system-ui, sans-serif; }
-  .load-logo { display: block; width: 220px; height: auto; aspect-ratio: 390 / 201; object-fit: contain; margin: 0 auto; filter: drop-shadow(0 4px 10px #0008); }
+  .load-logo { display: block; width: 220px; height: auto; aspect-ratio: 1754 / 897; object-fit: contain; margin: 0 auto; filter: drop-shadow(0 4px 10px #0008); }
   .load-card h2 { margin: 16px 0 4px; font: 800 32px "Barlow Condensed", Impact, sans-serif; }
   .load-card p { margin: 0 0 18px; color: #aaa3bd; font-size: 13px; }
   .load-bar { height: 10px; background: #100b1d; border: 1px solid #ffffff1b; border-radius: 6px; overflow: hidden; }
@@ -181,7 +181,7 @@
 </div>
 <div id="carregando" role="status" aria-live="polite">
   <div class="load-card">
-    <img class="load-logo" src="../img/plataforma/logo-arena-crush.png" alt="Arena Crush" width="390" height="201">
+    <img class="load-logo" src="../img/plataforma/logo-arena-crush.png" alt="Arena Crash" width="1754" height="897">
     <h2>Carregando a ilha…</h2>
     <p>N. Sanity Beach · Desafio solo</p>
     <div class="load-bar" aria-hidden="true"><i id="carregando-barra"></i></div>
@@ -195,7 +195,7 @@
     <img src="../img/jogo/start.jpg" alt="Start — pressione espaço">
   </picture>
   <div class="start-barra">
-    <button type="button" id="start-lobby">← Lobby <small>(devolve a entrada)</small></button>
+    <button type="button" id="start-lobby">← Início <small>(devolve a entrada)</small></button>
     <span class="start-dica so-teclado">Esc: voltar</span>
     <span class="start-dica so-toque"></span><!-- "toque para começar" já está na imagem; aqui só aparecem erros -->
   </div>
@@ -1390,7 +1390,7 @@ const startScreen = document.getElementById('startscreen');
 document.getElementById('carregando').hidden = true;
 if (waitingStart) { startScreen.hidden = false; player.frozen = true; }
 computeScore(); scoreboard.show(score);
-// Começa com espaço, ou tocando/clicando na tela; o botão "← Lobby" (ou Esc) desiste.
+// Começa com espaço, ou tocando/clicando na tela; o botão "← Início" (ou Esc) desiste.
 const startGate = e => {
   if (!waitingStart || e.key === 'F5' || (e.ctrlKey && e.code === 'KeyR')) return;
   e.stopImmediatePropagation(); e.preventDefault();

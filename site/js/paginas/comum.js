@@ -10,8 +10,8 @@ export async function cabecalho({ raiz = '../', ativo = '' } = {}) {
   const link = (pag, txt) => `<a href="${raiz}${pag}/" class="${ativo === pag ? 'ativo' : ''}" ${ativo === pag ? 'aria-current="page"' : ''}>${txt}</a>`;
   const iniciais = u ? esc(u.nome.trim().split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase() || 'P1') : 'P1';
   el.innerHTML = `
-    <a class="brand" href="${raiz}lobby/" aria-label="Arena Crush — lobby"><img src="${raiz}img/plataforma/logo-arena-crush.png" alt="Arena Crush" width="390" height="201"></a>
-    <nav>${link('lobby', 'Lobby')}${link('carteira', 'Carteira')}${link('conta', 'Minha conta')}${u?.operador ? link('admin/configuracoes', 'Regras') : ''}</nav>
+    <a class="brand" href="${raiz}lobby/" aria-label="Arena Crash — Início"><img src="${raiz}img/plataforma/logo-arena-crush.png" alt="Arena Crash" width="1754" height="897"></a>
+    <nav>${link('lobby', 'Início')}${link('carteira', 'Carteira')}${link('conta', 'Minha conta')}${u?.operador ? link('admin/configuracoes', 'Regras') : ''}</nav>
     <div class="top-right">
       <span class="coin" aria-hidden="true">✦</span><b id="saldo-topo" title="Saldo em moedas">${arena.moedas(saldo)}</b>
       <a class="avatar" href="${raiz}conta/" aria-label="Minha conta">${iniciais}</a>

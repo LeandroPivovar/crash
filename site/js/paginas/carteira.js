@@ -22,8 +22,6 @@ async function render() {
   carteira = await arena.carteira();
   const c = carteira;
   $('saldo').textContent = arena.moedas(c.saldo);
-  $('saldo-treino').textContent = arena.moedas(c.saldoTreino || 0);
-  $('saldo-treino-box').hidden = !(c.saldoTreino > 0);
   atualizarSaldoTopo(c.saldo);
   // valores de depósito, com o selo das promoções que a conta ainda pode usar
   $('valores').innerHTML = c.valoresDeposito.map(v => {
@@ -94,15 +92,12 @@ $('form').addEventListener('submit', e => {
   if (chaveTipo === 'cpf' && chave.length !== 11) { erro.textContent = 'Informe o CPF da chave Pix (11 números).'; $('chave').focus(); return; }
   if (chaveTipo === 'telefone' && chave.length !== 11) { erro.textContent = 'Informe o celular com DDD (11 números).'; $('chave').focus(); return; }
   if (chaveTipo === 'telefone' && documento.length !== 11) { erro.textContent = 'Informe o CPF do titular da chave.'; $('documento').focus(); return; }
-  // cada saque pede o código do app autenticador
   pendente = { valor: v, chaveTipo, chave, documento };
   $('saque-valor').textContent = brl(v);
   $('saque-destino').textContent = `Pix ${chaveTipo === 'cpf' ? 'CPF' : 'telefone'} ${$('chave').value}`;
-  $('saque-com-2fa').hidden = !u.doisFatoresAtivo;
-  $('saque-sem-2fa').hidden = !!u.doisFatoresAtivo;
-  $('saque-erro').textContent = ''; $('saque-codigo').value = '';
+  $('saque-erro').textContent = '';
   $('dlg-saque').showModal();
-  if (u.doisFatoresAtivo) $('saque-codigo').focus();
+  $('saque-ok').focus();
 });
 
 // ---------- depósito por Pix ----------
@@ -151,35 +146,18 @@ $('dlg-copiar').addEventListener('click', async () => {
 });
 document.querySelectorAll('[data-fechar]').forEach(b => b.addEventListener('click', () => { $('confirmar').close(); render(); }));
 
-// ---------- depósito simulado (treino) ----------
-$('simular').addEventListener('click', e => ocupado(e.currentTarget, async () => {
-  erro.textContent = '';
-  const v = arena.paraCentavos($('simular-valor').value);
-  if (!(v >= 50) || v > 100000) { erro.textContent = 'Simule um valor entre R$ 0,50 e R$ 1.000.'; $('simular-valor').focus(); return; }
-  try {
-    await arena.simularDeposito(v);
-    $('simular-valor').value = '';
-    toast(`Depósito simulado de ${brl(v)} no saldo de treino. Bom treino! 🎮`);
-    await render();
-  } catch (err) { erro.textContent = err.message; }
-}));
-
 // ---------- saque ----------
 document.querySelectorAll('[data-fechar-saque]').forEach(b => b.addEventListener('click', () => $('dlg-saque').close()));
-$('saque-codigo').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('saque-ok').click(); } });
 $('saque-ok').addEventListener('click', e => ocupado(e.currentTarget, async () => {
-  const codigo = $('saque-codigo').value.trim();
-  if (!codigo) { $('saque-erro').textContent = 'Digite o código do app.'; return; }
   try {
-    await arena.sacar(pendente.valor, codigo, pendente);
+    await arena.sacar(pendente.valor, undefined, pendente);
     pendente = null;
     $('dlg-saque').close();
     $('valor').value = '';
     toast('Saque solicitado! O valor fica reservado até a aprovação da equipe.');
     await render();
   } catch (err) {
-    if (err.codigo === 'precisa_codigo') { $('saque-erro').textContent = err.message; $('saque-codigo').select(); }
-    else { $('dlg-saque').close(); erro.textContent = err.message; }
+    $('saque-erro').textContent = err.message;
   }
 }));
 

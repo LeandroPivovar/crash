@@ -19,7 +19,7 @@ const erro = $('erro'), aviso = $('aviso');
 let modo = 'entrar';
 
 const TEXTOS = {
-  entrar: ['Entre na arena.', 'Seu lugar na largada está reservado.', 'ENTRAR NO LOBBY <b>➜</b>'],
+  entrar: ['Entre na arena.', 'Seu lugar na largada está reservado.', 'Entrar'],
   criar: ['Crie sua conta.', 'Escolha seu nome e venha para a disputa.', 'CRIAR CONTA <b>➜</b>'],
   recuperar: ['Recuperar senha.', 'Informe o e-mail da sua conta. Vamos enviar um link para criar uma nova senha.', 'ENVIAR LINK <b>➜</b>'],
   codigo: ['Verificação em duas etapas.', 'Abra o app autenticador no celular e digite o código de 6 dígitos do Crash Arena.', 'CONFIRMAR <b>✓</b>'],
@@ -47,7 +47,9 @@ $('voltar-login').addEventListener('click', () => trocarModo('entrar'));
 document.querySelector('.eye').addEventListener('click', e => {
   const i = $('senha');
   i.type = i.type === 'password' ? 'text' : 'password';
-  e.currentTarget.setAttribute('aria-label', i.type === 'password' ? 'Mostrar senha' : 'Ocultar senha');
+  const oculto = i.type === 'password';
+  e.currentTarget.setAttribute('aria-label', oculto ? 'Mostrar senha' : 'Ocultar senha');
+  e.currentTarget.querySelector('img').src = oculto ? 'img/bootstrap-icons/eye.svg' : 'img/bootstrap-icons/eye-slash.svg';
 });
 
 const falhar = (msg, campo) => { erro.textContent = msg; if (campo) $(campo).focus(); };
