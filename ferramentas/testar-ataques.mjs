@@ -279,31 +279,16 @@ try {
   const ganhos = varios.filter(r => r.j?.bonus === 1000).length;
   conferir('8 depósitos de R$ 5 ao mesmo tempo: só 1 bônus', ganhos === 1 && (await bc('GET', '/api/carteira')).j.saldo === 8 * 500 + 1000, `${ganhos} bônus`);
 
-  console.log('--- treino (depósito simulado, não vira saque)');
+  console.log('--- treino desativado');
   const tr = await novaConta('Treino');
-  conferir('simular abaixo de R$ 0,50', (await tr('POST', '/api/carteira/simular', { valor: 49 })).s === 400);
-  const sim = (await tr('POST', '/api/carteira/simular', { valor: 50 })).j;
-  conferir('simular R$ 0,50 vai só para o treino', sim.saldoTreino === 50 && sim.saldo === 0);
-  await tr('POST', '/api/carteira/simular', { valor: 950 });
+  conferir('rota de depósito simulado removida', (await tr('POST', '/api/carteira/simular', { valor: 1000 })).s === 404);
+  const trId = await idDe(tr);
+  dbTeste.prepare("INSERT INTO movimentos (usuario_id, tipo, valor, descricao, criado, carteira) VALUES (?, 'deposito', 1000, 'Depósito antigo de treino', ?, 'treino')").run(trId, Date.now());
+  conferir('nova partida de treino é recusada mesmo com saldo antigo', (await tr('POST', '/api/partidas', { entrada: 500, carteira: 'treino' })).s === 400);
+  conferir('saldo antigo de treino não financia partida real', (await tr('POST', '/api/partidas', { entrada: 100 })).s === 400);
   const crt = (await tr('GET', '/api/carteira')).j;
-  conferir('treino não conta como depósito (rodada e saldo real)', crt.saldo === 0 && crt.saldoTreino === 1000 && crt.rodada.depositado === 0);
-  conferir('partida valendo sem saldo real é recusada', (await tr('POST', '/api/partidas', { entrada: 100 })).s === 400);
-  const ptA = (await tr('POST', '/api/partidas', { entrada: 50, carteira: 'treino' })).j;
-  conferir('partida de treino com R$ 0,50', ptA.partida?.carteira === 'treino' && ptA.saldoTreino === 950 && ptA.saldo === 0);
-  await tr('POST', `/api/partidas/${ptA.partida.id}/cancelar`);
-  conferir('cancelar a partida de treino devolve ao treino', (await tr('GET', '/api/carteira')).j.saldoTreino === 1000 && (await tr('GET', '/api/eu')).j.saldo === 0);
-  conferir('treino não deixa o saldo negativo', (await tr('POST', '/api/partidas', { entrada: 1001, carteira: 'treino' })).s === 400);
-  // jogar e ganhar no treino: as frutas voltam para o treino; o fluxo de partidas não anda
-  const ptB = (await tr('POST', '/api/partidas', { entrada: 500, carteira: 'treino' })).j.partida;
-  await tr('POST', `/api/partidas/${ptB.id}/comecar`);
-  await tr('POST', `/api/partidas/${ptB.id}/encerrar`, { rle: [[8, 30]], frutas: 0 });
-  const ptC = (await tr('POST', '/api/partidas', { entrada: 50, carteira: 'treino' })).j.partida;
-  conferir('treino não avança o fluxo de partidas', ptB.regras.fluxoPosicao === 1 && ptC.regras.fluxoPosicao === 1);
-  await tr('POST', `/api/partidas/${ptC.id}/cancelar`);
-  dbTeste.prepare("INSERT INTO movimentos (usuario_id, tipo, valor, descricao, partida_id, criado, carteira) VALUES (?, 'premio', 3000, 'Frutas (teste)', ?, ?, 'treino')").run(await idDe(tr), ptB.id, Date.now());
-  const fimTr = (await tr('GET', '/api/carteira')).j;
-  conferir('ganho no treino fica no treino (saldo real continua zero)', fimTr.saldo === 0 && fimTr.saldoTreino === 1000 - 500 + 3000);
-  const opTr = (await op('GET', `/api/admin/usuarios/${await idDe(tr)}`)).j.usuario;
+  conferir('saldo antigo de treino continua separado', crt.saldo === 0 && crt.saldoTreino === 1000 && crt.rodada.depositado === 0);
+  const opTr = (await op('GET', `/api/admin/usuarios/${trId}`)).j.usuario;
   conferir('admin: lucro e saldo contam só dinheiro real', opTr.saldo === 0 && opTr.resultado === 0 && opTr.depositado === 0 && opTr.partidas === 0);
 
   console.log('--- usuários no admin (suporte)');

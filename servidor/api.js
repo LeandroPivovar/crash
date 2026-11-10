@@ -676,15 +676,6 @@ rota('POST', '/api/carteira/deposito', { login: true }, async ({ u, corpo, ip })
   auditar('deposito_pix_gerado', { u, ip, detalhe: { deposito: id, valor: v } });
   return { deposito: depositoPublico(db.prepare('SELECT * FROM depositos WHERE id = ?').get(id)) };
 });
-// Depósito simulado (treino): qualquer valor a partir de R$ 0,50, entra na hora na carteira de treino. Não é
-// dinheiro: não pode ser sacado, nem o que for ganho jogando com ele (as partidas de treino pagam no treino).
-rota('POST', '/api/carteira/simular', { login: true }, ({ u, corpo }) => {
-  limitar(`simular:${u.id}`, 20, 60e3);
-  const v = centavos(corpo.valor);
-  if (v < 50 || v > 100000) throw new Erro(400, 'Simule um valor entre R$ 0,50 e R$ 1.000.');
-  lancar(u.id, 'deposito', v, 'Depósito simulado (treino)', null, 'treino');
-  return { saldoTreino: saldo(u.id, 'treino'), saldo: saldo(u.id) };
-});
 // A página do QR pergunta se o Pix já foi pago (e o servidor confere na CajuPay, no máximo a cada 5 s).
 rota('GET', '/api/carteira/deposito/(\\d{1,12})', { login: true }, async ({ u, m }) => {
   let d = db.prepare('SELECT * FROM depositos WHERE id = ? AND usuario_id = ?').get(Number(m[1]), u.id);
@@ -755,26 +746,25 @@ rota('GET', '/api/resultado', { login: true }, ({ u }) => ({
 }));
 rota('POST', '/api/partidas', { login: true }, async ({ u, corpo }) => {
   limitar(`nova-partida:${u.id}`, 20, 60e3, 'Muitas partidas seguidas. Espere um pouco.');
+  if (corpo.carteira === 'treino') throw new Erro(400, 'O modo treino foi desativado.');
   await resolverPendente(u.id);
   return transacao(() => {
     if (partidaAberta(u.id)) throw new Erro(409, 'Você já tem uma partida aberta.');
-    const carteira = corpo.carteira === 'treino' ? 'treino' : 'real';
     const entrada = centavos(corpo.entrada);
-    const minimo = carteira === 'treino' ? 50 : ENTRADA_MIN;
-    if (entrada < minimo) throw new Erro(400, carteira === 'treino' ? 'A entrada mínima no treino é 0,50 moeda.' : 'A entrada mínima é 1 moeda.');
+    if (entrada < ENTRADA_MIN) throw new Erro(400, 'A entrada mínima é 1 moeda.');
     if (entrada > ENTRADA_MAX) throw new Erro(400, 'A entrada máxima é 10.000 moedas.');
-    if (entrada > saldo(u.id, carteira)) throw new Erro(400, carteira === 'treino' ? 'Saldo de treino insuficiente. Simule um depósito na carteira.' : 'Saldo insuficiente para essa entrada.');
+    if (entrada > saldo(u.id)) throw new Erro(400, 'Saldo insuficiente para essa entrada.');
     const id = 'p_' + crypto.randomBytes(12).toString('base64url');
     const semente = crypto.randomInt(0, 2 ** 31);
     // fluxo de partidas: a N-ª partida do jogador (sem contar as canceladas antes do START) usa a dificuldade da
     // posição N do fluxo; depois da última, recomeça. As regras ficam congeladas na partida (o replay usa estas).
-    // (só partidas reais contam: o treino usa a posição da próxima partida real, sem avançar o fluxo)
+    // Partidas antigas de treino ficam fora da contagem.
     const feitas = db.prepare("SELECT COUNT(*) AS n FROM partidas WHERE usuario_id = ? AND estado <> 'cancelada' AND carteira = 'real'").get(u.id).n;
     const posicao = feitas % cfg.FLUXO_TAM;
     const regras = { ...cfg.regrasNoFluxo(regrasAtuais(), posicao), fluxoPosicao: posicao + 1 };
     db.prepare("INSERT INTO partidas (id, usuario_id, entrada, semente, regras, estado, criada, carteira) VALUES (?, ?, ?, ?, ?, 'criada', ?, ?)")
-      .run(id, u.id, entrada, semente, JSON.stringify(regras), agora(), carteira);
-    lancar(u.id, 'entrada', -entrada, carteira === 'treino' ? 'Entrada · Treino' : 'Entrada · Desafio solo', id, carteira);
+      .run(id, u.id, entrada, semente, JSON.stringify(regras), agora(), 'real');
+    lancar(u.id, 'entrada', -entrada, 'Entrada · Desafio solo', id);
     return { partida: partidaPublica(db.prepare('SELECT * FROM partidas WHERE id = ?').get(id)), saldo: saldo(u.id), saldoTreino: saldo(u.id, 'treino') };
   });
 });
