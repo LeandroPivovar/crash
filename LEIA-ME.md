@@ -42,7 +42,7 @@ node ferramentas/testar-ataques.mjs
 
 ## Fluxo
 
-Entrar (login, criar conta com data de nascimento, ou visitante confirmando 18+; com o app autenticador ativo, o login pede o código) → **Carteira**: depósito/saque simulados → **Lobby**: valor de entrada + Jogar (o servidor cria a partida e desconta a entrada) → **Jogar**: START (Esc devolve a entrada) → morte → **Resultado**: entrada, frutas, recebido, lucro/prejuízo e saldo.
+Entrar (login, criar conta confirmando 18+, ou visitante confirmando 18+; com o app autenticador ativo, o login pede o código) → **Carteira**: depósito/saque simulados → **Lobby**: valor de entrada + Jogar (o servidor cria a partida e desconta a entrada) → **Jogar**: START (Esc devolve a entrada) → morte → **Resultado**: entrada, frutas, recebido, lucro/prejuízo e saldo.
 
 Regras do jogo (só operador): http://localhost:8091/admin/configuracoes/ — o link "Regras" aparece no menu para o operador.
 
@@ -89,7 +89,7 @@ Todas em `/api`, JSON. Pedidos que mudam algo exigem o cabeçalho `X-Arena: 1`. 
 
 | Rota | O que faz |
 |---|---|
-| `POST /cadastro` `{nome, email, senha, nascimento}` | Cria conta (18+, senha com 8+ caracteres) e entra |
+| `POST /cadastro` `{nome, email, senha, maior18: true}` | Cria conta (18+, senha com 8+ caracteres) e entra |
 | `POST /login` `{email, senha}` → `POST /login/2fa` `{desafio, codigo}` · `POST /visitante` `{maior18:true}` · `POST /sair` | Sessão; com app autenticador, o login devolve um desafio e a sessão sai com o código |
 | `POST /conta/2fa/iniciar` `{senha}` · `/confirmar` `{codigo}` · `/desativar` `{senha, codigo}` | App autenticador do jogador (operador: `/admin/2fa/*`) |
 | `GET /eu` · `PATCH /eu` `{nome, email, novaSenha?, senhaAtual?}` | Perfil e saldo |

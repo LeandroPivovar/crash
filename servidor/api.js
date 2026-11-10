@@ -390,15 +390,20 @@ rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   if (!emailValido(email)) throw new Erro(400, 'Informe um e-mail válido.');
   const ruim = senhaForte(senha);
   if (ruim) throw new Erro(400, ruim);
-  const a = idade(corpo.nascimento);
-  if (!(a >= 0 && a < 130)) throw new Erro(400, 'Informe sua data de nascimento.');
-  if (a < IDADE_MIN) { auditar('cadastro_menor', { ip }); throw new Erro(403, 'O Crash Arena é só para maiores de 18 anos.'); }
+  const nascimento = corpo.nascimento ?? null;
+  if (nascimento !== null) {
+    const a = idade(nascimento);
+    if (!(a >= 0 && a < 130)) throw new Erro(400, 'Informe uma data de nascimento válida.');
+    if (a < IDADE_MIN) { auditar('cadastro_menor', { ip }); throw new Erro(403, 'O Crash Arena é só para maiores de 18 anos.'); }
+  } else if (corpo.maior18 !== true) {
+    throw new Erro(400, 'Confirme que você tem 18 anos ou mais.');
+  }
   if (db.prepare('SELECT 1 FROM usuarios WHERE email = ?').get(email)) throw new Erro(409, 'Já existe uma conta com esse e-mail.');
   // link de indicação (?ref=CODIGO): só vale se existir e estiver ativo
   const ref = typeof corpo.ref === 'string' && /^[a-z0-9-]{3,32}$/i.test(corpo.ref)
     ? db.prepare('SELECT id FROM indicacoes WHERE codigo = ? AND ativo = 1').get(corpo.ref.toLowerCase()) : null;
   const r = db.prepare('INSERT INTO usuarios (nome, email, senha_hash, nascimento, criado, email_confirmado, indicacao_id, tutorial_feito) VALUES (?, ?, ?, ?, ?, ?, ?, 0)')
-    .run(nome, email, hashSenha(senha), corpo.nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1, ref ? ref.id : null);
+    .run(nome, email, hashSenha(senha), nascimento, agora(), CONFIRMAR_EMAIL ? 0 : 1, ref ? ref.id : null);
   auditar('cadastro', { u: Number(r.lastInsertRowid), ip, ...(ref ? { detalhe: { indicacao: ref.id } } : {}) });
   if (CONFIRMAR_EMAIL) {
     // a conta só entra depois de confirmar o e-mail (link enviado agora)

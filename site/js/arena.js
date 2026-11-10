@@ -38,7 +38,7 @@ export async function sessao(forcar = false) {
   return eu;
 }
 export const usuario = async () => (await sessao()).usuario;
-export async function cadastrar({ nome, email, senha, nascimento, ref }) { eu = null; return api('POST', '/cadastro', { nome, email, senha, nascimento, ...(ref ? { ref } : {}) }); }
+export async function cadastrar({ nome, email, senha, maior18, ref }) { eu = null; return api('POST', '/cadastro', { nome, email, senha, maior18, ...(ref ? { ref } : {}) }); }
 export const visitaIndicacao = ref => api('POST', '/indicacao/visita', { ref }).catch(() => null);
 // Pode responder { precisa2fa: true, desafio } (conta com app autenticador): aí vem entrarComCodigo.
 export async function entrar({ email, senha }) { eu = null; return api('POST', '/login', { email, senha }); }

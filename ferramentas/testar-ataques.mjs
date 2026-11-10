@@ -106,7 +106,9 @@ try {
   conferir('cadastro de menor de 18', (await v('POST', '/api/cadastro', { nome: 'Kid', email: `kid${Date.now()}@x.com`, senha: 'senha-boa-123', nascimento: '2015-01-01' })).s === 403);
   conferir('senha fraca', (await v('POST', '/api/cadastro', { nome: 'Fraco', email: `fr${Date.now()}@x.com`, senha: 'aaaaaaaa', nascimento: '1990-01-01' })).s === 400);
   const emailNovo = `novo${Date.now()}@x.com`, novo = cliente();
-  const cad = await novo('POST', '/api/cadastro', { nome: 'Novo', email: emailNovo, senha: 'senha-boa-123', nascimento: '1990-01-01' });
+  const dadosNovo = { nome: 'Novo', email: emailNovo, senha: 'senha-boa-123' };
+  conferir('cadastro sem data exige confirmação de 18+', (await novo('POST', '/api/cadastro', dadosNovo)).s === 400);
+  const cad = await novo('POST', '/api/cadastro', { ...dadosNovo, maior18: true });
   // confirmação de e-mail desligada (padrão): o cadastro já entra; os links de confirmação inventados continuam inválidos
   conferir('cadastro entra direto (sem confirmação de e-mail)', !cad.j?.confirmar && (await novo('GET', '/api/eu')).j.usuario?.email === emailNovo);
   conferir('link de confirmação inventado', (await novo('POST', '/api/confirmar', { token: 'A'.repeat(43) })).s === 400);
