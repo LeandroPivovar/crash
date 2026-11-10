@@ -1,5 +1,8 @@
 /* Crash Arena — estilos de cada tela */
 
+html:has(#dlg-saque:modal) { overflow: hidden; }
+#dlg-saque::backdrop { position: fixed; inset: 0; }
+
 /* ---------- Entrar ---------- */
 body.pg-entrar main { min-height: 100vh; display: grid; grid-template-columns: 1.3fr 1fr; gap: 6%; align-items: center; padding: 58px 6% 56px;
   background: linear-gradient(90deg, #130d2240 0%, #140d2200 40%, #130c2300 70%, #130c2340 100%), url(../img/plataforma/fundo-entrar.jpg) center / cover no-repeat, #130c23; }
@@ -19,13 +22,11 @@ body.pg-entrar .subtitle { margin-bottom: 12px; }
 body.pg-entrar .tabs { margin-bottom: 8px; }
 body.pg-entrar label { margin: 12px 0 6px; }
 body.pg-entrar input { height: 44px; }
-body.pg-entrar .field > span { top: 13px; }
-body.pg-entrar .eye { top: 10px; }
+body.pg-entrar .auth-icon { display: block; width: 16px; height: 16px; filter: invert(1); opacity: .58; }
+body.pg-entrar .field > .auth-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+body.pg-entrar .eye { top: 50%; transform: translateY(-50%); padding: 6px; }
 body.pg-entrar .options { margin: 8px 0 14px; }
 body.pg-entrar .note { margin: 14px 0 0; padding: 9px 12px; }
-/* criar conta: senha e confirmação lado a lado (some a rolagem) */
-.senhas { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-.senhas > div:only-child, .senhas > div:has(+ [hidden]) { grid-column: 1 / -1; }
 body.pg-entrar .check { margin: 14px 0 14px; height: auto; line-height: 1.2; }
 body.pg-entrar .erro:empty { min-height: 0; margin: 0; }
 /* telas mais baixas: tudo um pouco mais junto, para o "Criar conta" caber sem barra de rolagem */
@@ -34,8 +35,6 @@ body.pg-entrar .erro:empty { min-height: 0; margin: 0; }
   body.pg-entrar .subtitle { margin-bottom: 10px; }
   body.pg-entrar label { margin: 9px 0 5px; }
   body.pg-entrar input { height: 40px; }
-  body.pg-entrar .field > span { top: 11px; }
-  body.pg-entrar .eye { top: 8px; }
   body.pg-entrar .tabs button { padding: 9px 0; }
   body.pg-entrar .primary { padding: 13px; }
   body.pg-entrar .check { margin: 12px 0; }
@@ -76,7 +75,7 @@ body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 400px); jus
 .lobby-intro { display: none; }
 .lobby-intro h1 { font: 800 clamp(34px, 3vw, 56px)/1.05 var(--display); margin: 0 0 10px; text-shadow: 0 2px 16px #10091d; }
 .lobby-intro p { color: #e4dcef; font-size: 14px; line-height: 1.7; max-width: 520px; text-shadow: 0 2px 10px #000; margin: 0; }
-.match-panel { background: rgba(24,14,39,.94); border: 1px solid #ffffff20; border-radius: 20px; padding: 24px; box-shadow: 0 16px 48px #10081938; animation: entrar .35s ease-out; }
+.match-panel { background: #180e27; border: 1px solid #ffffff20; border-radius: 20px; padding: 24px; box-shadow: 0 16px 48px #10081938; animation: entrar .35s ease-out; }
 .season { font-size: 10px; letter-spacing: 2px; color: #aa91c0; }
 .match-panel h3 { font: 800 34px/1.1 var(--display); margin: 10px 0; }
 .match-panel > p { color: #ac9cbd; font-size: 13px; line-height: 1.6; margin: 0 0 12px; }
@@ -87,7 +86,7 @@ body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 400px); jus
 .stake .field > span { top: 13px; color: #ffc34f; }
 .stake-info { display: flex; justify-content: space-between; font-size: 11px; color: #a699b6; margin-top: 8px; }
 .match-panel .primary { margin-top: 16px; }
-.lobby-history { grid-column: 1; background: rgba(24,14,39,.88); border: 1px solid #ffffff16; border-radius: 18px; padding: 20px 22px; }
+.lobby-history { grid-column: 1; background: #180e27; border: 1px solid #ffffff16; border-radius: 18px; padding: 20px 22px; }
 .lobby-history .lista { margin: 0; }
 .lobby-history .lista ol { max-height: 230px; }
 
@@ -103,9 +102,13 @@ body.pg-lobby main { display: grid; grid-template-columns: minmax(0, 400px); jus
 .acoes { display: grid; gap: 10px; margin-top: 18px; }
 
 @media (max-width: 900px) {
-  body.pg-entrar main { grid-template-columns: 1fr; gap: 25px; padding: 35px 6%; background-position: 30% center; height: auto; min-height: 100vh; }
-  body.pg-entrar .panel { justify-self: center; max-width: 470px; background: #21152eee; max-height: none; overflow: visible; }
-  /* celular: só o logo, no centro, em cima do formulário */
+  body.pg-entrar main { grid-template-columns: 1fr; gap: 25px; padding: 35px 6%; height: auto; min-height: 100vh;
+    background: url(../img/plataforma/fundo-entrar-mobile.png) 60% center / cover no-repeat, #130c23; }
+  body.pg-entrar .panel { position: relative; justify-self: center; max-width: 470px; background: #21152eee;
+    max-height: none; overflow: visible; margin-top: 126px; padding-top: 38px; }
+  body.pg-entrar .panel::before { content: ""; position: absolute; bottom: calc(100% - 27px); left: 50%;
+    width: 190px; aspect-ratio: 1312 / 1199; transform: translateX(-50%); pointer-events: none;
+    background: url(../img/plataforma/crash-auth-mobile.png) center / contain no-repeat; }
   .hero h1 { display: none; }
   .logo-hero { position: static; margin: 0 auto; width: min(260px, 70vw); }
   body.pg-lobby main { grid-template-columns: 1fr; background-size: auto 100%; }

@@ -148,12 +148,8 @@ try {
   conferir('depósito fora dos valores (R$ 20)', (await a0('POST', '/api/carteira/deposito', { valor: 2000 })).s === 400);
   await a('POST', '/api/carteira/deposito', { valor: 5000 });
   const PIX = { chaveTipo: 'cpf', chave: CPF_OK };
-  const semApp2 = await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX });
-  conferir('saque sem o app autenticador ativo', semApp2.s === 403 && semApp2.j.codigo === 'configurar_2fa');
   conferir('ativar o app do jogador exige a senha', (await a('POST', '/api/conta/2fa/iniciar', { senha: 'errada-errada' })).s === 401);
-  const appA = await ativar2fa(a);
-  conferir('jogador ativa o app (8 códigos de reserva)', appA.reserva?.length === 8);
-  const semJogar = await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX, codigo: appA.reserva[6] });
+  const semJogar = await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX });
   conferir('saque bloqueado antes de jogar o valor depositado', semJogar.s === 403 && semJogar.j.codigo === 'rodada' && (await a('GET', '/api/carteira')).j.rodada.falta === 5000);
   await jogou(a, 4000);
   conferir('jogou só parte: continua bloqueado', (await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX })).j?.codigo === 'rodada');
@@ -161,14 +157,10 @@ try {
   conferir('chave Pix: CPF inválido', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'cpf', chave: '12345678900' })).s === 400);
   conferir('chave Pix: telefone sem CPF do titular', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'telefone', chave: '11912345678' })).s === 400);
   conferir('chave Pix: tipo desconhecido (e-mail)', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'email', chave: 'x@x.com' })).s === 400);
-  conferir('saque sem código', (await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX })).s === 401);
-  conferir('saque com código errado', (await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX, codigo: '999999' })).s === 401 || codigoDoApp(appA.segredo) === '999999');
-  conferir('saque com o código já usado na ativação', (await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX, codigo: codigoDoApp(appA.segredo) })).s === 401);
-  conferir('saque maior que o saldo', (await a('POST', '/api/carteira/saque', { valor: 6000, ...PIX, codigo: appA.reserva[7] })).s === 400);
-  // 6 saques ao mesmo tempo, cada um com um código de reserva diferente (o 7º e o 8º foram gastos acima)
-  const tentativas = await Promise.all(appA.reserva.slice(0, 6).map((codigo, k) => a('POST', '/api/carteira/saque', { valor: 1000, codigo, ...(k % 2 ? { chaveTipo: 'telefone', chave: '(11) 91234-5678', documento: CPF_OK } : PIX) })));
+  conferir('saque maior que o saldo', (await a('POST', '/api/carteira/saque', { valor: 6000, ...PIX })).s === 400);
+  const tentativas = await Promise.all(Array.from({ length: 6 }, (_, k) => a('POST', '/api/carteira/saque', { valor: 1000, ...(k % 2 ? { chaveTipo: 'telefone', chave: '(11) 91234-5678', documento: CPF_OK } : PIX) })));
   const saldoA = (await a('GET', '/api/eu')).j.saldo;
-  conferir('6 saques de 10 ao mesmo tempo com saldo 50', saldoA === 0 && tentativas.filter(r => r.s === 200).length === 5, `saldo final ${saldoA}`);
+  conferir('6 saques sem 2FA de 10 ao mesmo tempo com saldo 50', saldoA === 0 && tentativas.filter(r => r.s === 200).length === 5, `saldo final ${saldoA}`);
   await creditar(a, 3000);
   const duplas = await Promise.all(Array.from({ length: 5 }, () => a('POST', '/api/partidas', { entrada: 3000 })));
   const saldoB = (await a('GET', '/api/eu')).j.saldo;
@@ -501,9 +493,9 @@ try {
   conferir('sem webhook, a consulta à CajuPay credita o Pix pago', consultado.deposito?.estado === 'pago' && consultado.saldo === 11000);
   conferir('outro jogador não vê o Pix de ninguém', (await (await novaConta('Curioso', basePix))('GET', `/api/carteira/deposito/${dp2.id}`)).s === 404);
   // saque com envio automático: aprovar manda o Pix; se o banco recusar, o valor volta
-  const appPx = await ativar2fa(px);
+  await ativar2fa(px);
   await jogou(px, 11000, bancoDe(dbPix));
-  const pedSaque = await px('POST', '/api/carteira/saque', { valor: 3000, chaveTipo: 'telefone', chave: '(21) 99876-5432', documento: CPF_OK, codigo: appPx.reserva[0] });
+  const pedSaque = await px('POST', '/api/carteira/saque', { valor: 3000, chaveTipo: 'telefone', chave: '(21) 99876-5432', documento: CPF_OK });
   conferir('saque por telefone pedido (valor reservado)', pedSaque.s === 200 && pedSaque.j.saldo === 8000 && pedSaque.j.saque.chaveFinal === '5432');
   const opPix = cliente(basePix);
   const listaPix = (await opPix('GET', '/api/admin/saques?estado=pendente')).j;
@@ -515,7 +507,7 @@ try {
   const falha = { id: 'evt2', type: 'payout.failed', data: { object: { external_ref: `saque-${sqPix.id}`, status: 'failed', last_error: 'chave inexistente' } } };
   const f1 = await webhook(falha), f2 = await webhook(falha);
   conferir('saque recusado pelo banco devolve o valor uma vez só', f1.j?.resultado === 'saque_devolvido' && f2.j?.resultado === 'ja_tratado' && (await px('GET', '/api/eu')).j.saldo === 11000);
-  const ped2 = await px('POST', '/api/carteira/saque', { valor: 2000, chaveTipo: 'cpf', chave: CPF_OK, codigo: appPx.reserva[1] });
+  const ped2 = await px('POST', '/api/carteira/saque', { valor: 2000, chaveTipo: 'cpf', chave: CPF_OK });
   await opPix('POST', `/api/admin/saques/${ped2.j.saque.id}`, { decisao: 'aprovar' });
   const okW = await webhook({ id: 'evt3', type: 'payout.paid', data: { object: { external_ref: `saque-${ped2.j.saque.id}`, status: 'paid' } } });
   const meusPx = (await px('GET', '/api/carteira')).j.saques;

@@ -15,7 +15,6 @@
     <h2 id="titulo">Suas moedas.</h2>
     <p class="subtitle">Gerencie seu saldo em um só lugar.</p>
     <div class="big-balance num">✦ <span id="saldo">0,00</span> <small>moedas</small></div>
-    <p class="saldo-treino" id="saldo-treino-box" hidden>🎮 Treino: <b>✦ <span id="saldo-treino">0,00</span></b> <small>(depósito simulado · não pode ser sacado)</small></p>
     <div class="tabs" role="tablist">
       <button type="button" class="selected" data-acao="deposito" role="tab" aria-selected="true">Depositar</button>
       <button type="button" data-acao="saque" role="tab" aria-selected="false">Sacar</button>
@@ -25,11 +24,6 @@
         <label>VALOR DO DEPÓSITO (PIX)</label>
         <div class="amounts deposito-valores" id="valores"></div>
         <div id="promos"></div>
-        <div class="simular">
-          <label for="simular-valor">OU SIMULE UM DEPÓSITO (TREINO)</label>
-          <div class="simular-linha"><div class="field"><span>R$</span><input id="simular-valor" inputmode="decimal" autocomplete="off" placeholder="0,50"></div><button type="button" class="secondary" id="simular">SIMULAR</button></div>
-          <small>A partir de R$ 0,50. Vai para o saldo de treino: dá para jogar, mas não é dinheiro e não pode ser sacado (nem o que você ganhar com ele).</small>
-        </div>
         <p class="note">✦ &nbsp; R$ 1 = 1 moeda<br><span id="nota-pix">Pagamento por Pix: o saldo entra assim que o banco confirmar.</span></p>
       </div>
       <div id="bloco-saque" hidden>
@@ -84,16 +78,8 @@
   <div class="badge">CARTEIRA · SAQUE</div>
   <h2 id="saque-titulo">Confirme o saque</h2>
   <div class="payment-summary"><strong id="saque-valor"></strong><span id="saque-destino"></span></div>
-  <div id="saque-com-2fa">
-    <label for="saque-codigo">CÓDIGO DO APP AUTENTICADOR</label>
-    <div class="field"><span>#</span><input id="saque-codigo" inputmode="numeric" maxlength="11" autocomplete="one-time-code" placeholder="6 dígitos (ou código de reserva)"></div>
-    <p class="erro" id="saque-erro" role="alert"></p>
-    <button class="primary" type="button" id="saque-ok">CONFIRMAR SAQUE <b>✓</b></button>
-  </div>
-  <div id="saque-sem-2fa" hidden>
-    <p>Para sacar, ative antes a <b>verificação em duas etapas</b> (app autenticador no celular). Assim, quem descobrir sua senha não consegue tirar suas moedas.</p>
-    <a class="primary" href="../conta/" style="display:block;text-align:center;text-decoration:none">ATIVAR EM MINHA CONTA ➜</a>
-  </div>
+  <p class="erro" id="saque-erro" role="alert"></p>
+  <button class="primary" type="button" id="saque-ok">CONFIRMAR SAQUE <b>✓</b></button>
   <button class="secondary" type="button" data-fechar-saque style="margin-top:10px">← Voltar</button>
 </dialog>
 <script type="module" src="../js/paginas/carteira.js"></script>

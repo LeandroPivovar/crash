@@ -42,7 +42,7 @@ node ferramentas/testar-ataques.mjs
 
 ## Fluxo
 
-Entrar (login, criar conta com data de nascimento, ou visitante confirmando 18+; com o app autenticador ativo, o login pede o código) → **Carteira**: depósito/saque simulados (sacar exige a verificação em duas etapas, ativada em **Minha conta**, e o código do app a cada saque) → **Lobby**: valor de entrada + Jogar (o servidor cria a partida e desconta a entrada) → **Jogar**: START (Esc devolve a entrada) → morte → **Resultado**: entrada, frutas, recebido, lucro/prejuízo e saldo.
+Entrar (login, criar conta com data de nascimento, ou visitante confirmando 18+; com o app autenticador ativo, o login pede o código) → **Carteira**: depósito/saque simulados → **Lobby**: valor de entrada + Jogar (o servidor cria a partida e desconta a entrada) → **Jogar**: START (Esc devolve a entrada) → morte → **Resultado**: entrada, frutas, recebido, lucro/prejuízo e saldo.
 
 Regras do jogo (só operador): http://localhost:8091/admin/configuracoes/ — o link "Regras" aparece no menu para o operador.
 
@@ -94,7 +94,7 @@ Todas em `/api`, JSON. Pedidos que mudam algo exigem o cabeçalho `X-Arena: 1`. 
 | `POST /conta/2fa/iniciar` `{senha}` · `/confirmar` `{codigo}` · `/desativar` `{senha, codigo}` | App autenticador do jogador (operador: `/admin/2fa/*`) |
 | `GET /eu` · `PATCH /eu` `{nome, email, novaSenha?, senhaAtual?}` | Perfil e saldo |
 | `POST /recuperar` `{email}` · `POST /redefinir` `{token, senha}` | Recuperação de senha |
-| `GET /carteira` · `POST /carteira/deposito` `{valor, metodo}` · `POST /carteira/saque` `{valor, codigo}` | Livro-razão: o saldo é a soma dos movimentos |
+| `GET /carteira` · `POST /carteira/deposito` `{valor, metodo}` · `POST /carteira/saque` `{valor, chaveTipo, chave, documento}` | Livro-razão: o saldo é a soma dos movimentos |
 | `POST /partidas` `{entrada}` | Cria a partida (semente e regras do servidor) e desconta a entrada |
 | `GET /partida` · `POST /partida/resolver` | Partida aberta; resolve uma que ficou pendente (estorna ou encerra com o progresso) |
 | `POST /partidas/:id/comecar` · `/progresso` `{desde, rle, frutas, distancia}` · `/cancelar` · `/encerrar` `{rle, frutas, distancia, tempoMs}` | Ciclo da partida; a gravação (`rle`) vai junto e o servidor refaz a corrida para pagar |
