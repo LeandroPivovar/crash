@@ -104,7 +104,7 @@ let envioAuto = false;
 const local = await arena.adminLocal();
 const { usuario } = await arena.sessao().catch(() => ({}));
 if (local) $('aviso-local').hidden = false;
-const pode = local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores);
+const pode = local || usuario?.acessoOperador;
 if (!pode) {
   $('sem-acesso').hidden = false;
   if (usuario && !usuario.operador) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador.`;

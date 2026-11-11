@@ -369,9 +369,9 @@ if (local) {
 } else if (!usuario?.operador) {
   $('sem-acesso').hidden = false;
   if (usuario) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador. Saia e entre com a conta de operador.`;
-} else if (!usuario.doisFatoresAtivo) {
+} else if (!usuario.acessoOperador && !usuario.doisFatoresAtivo) {
   $('ativar-2fa').hidden = false; // primeiro, o app autenticador
-} else if (!usuario.sessaoComDoisFatores) {
+} else if (!usuario.acessoOperador && !usuario.sessaoComDoisFatores) {
   $('entrar-2fa').hidden = false;
 } else {
   $('form').hidden = false;
@@ -426,7 +426,7 @@ async function mostrarAuditoria() {
       : '<p class="vazio">Nada registrado ainda.</p>';
   } catch (err) { el.innerHTML = `<p class="vazio">${esc(err.message)}</p>`; }
 }
-if (local || (usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores)) {
+if (local || usuario?.acessoOperador) {
   $('auditoria').hidden = false;
   await mostrarAuditoria();
 }

@@ -158,7 +158,7 @@ const card = (rot, val, extra = '') => `<div class="card"><small>${rot}</small><
 const local = await arena.adminLocal();
 const { usuario } = await arena.sessao().catch(() => ({}));
 if (local) $('aviso-local').hidden = false;
-if (!local && !(usuario?.operador && usuario.doisFatoresAtivo && usuario.sessaoComDoisFatores)) {
+if (!local && !usuario?.acessoOperador) {
   $('sem-acesso').hidden = false;
   if (usuario && !usuario.operador) $('sem-acesso-msg').textContent = `Você entrou como ${usuario.nome}, que não é operador.`;
 } else {

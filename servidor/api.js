@@ -167,9 +167,11 @@ function usuarioDaSessao(req) {
   if (s.expira < agora()) { db.prepare('DELETE FROM sessoes WHERE token_hash = ?').run(sha(t)); return null; }
   return s;
 }
+const exigir2faOperador = process.env.ARENA_ADMIN_2FA !== '0';
 const publico = u => ({
   id: u.id, nome: u.nome, email: u.email || '', visitante: !!u.visitante, operador: !!u.operador,
   tutorialPendente: !u.tutorial_feito && !u.operador,
+  acessoOperador: !!u.operador && (!exigir2faOperador || (!!u.totp_ativo && !!u.dois_fatores)),
   ...(u.visitante ? {} : { doisFatoresAtivo: !!u.totp_ativo, sessaoComDoisFatores: !!u.dois_fatores }),
 });
 
@@ -424,7 +426,7 @@ rota('POST', '/api/login', {}, ({ corpo, res, req, ip }) => {
   baldes.delete(`login-conta:${email}`);
   if (CONFIRMAR_EMAIL && !u.email_confirmado) throw new Erro(403, 'Confirme seu e-mail para entrar. Procure o link que enviamos (veja também o spam).', 'confirmar_email');
   // conta com app autenticador: a senha certa só abre um desafio; a sessão vem depois do código
-  if (u.totp_ativo) {
+  if (u.totp_ativo && (!u.operador || exigir2faOperador)) {
     const desafio = crypto.randomBytes(24).toString('base64url');
     desafios.set(desafio, { uid: u.id, ate: agora() + 5 * 60e3, tentativas: 0 });
     auditar('login_senha_ok_esperando_codigo', { u, ip });
@@ -1377,7 +1379,7 @@ async function atender(req, res, url) {
     if ((achada.login || achada.operador) && !u) throw new Erro(401, 'Entre na sua conta.');
     if (achada.operador && !u.operador) { auditar('acesso_negado_operador', { u, ip, detalhe: url }); throw new Erro(403, 'Só o operador pode fazer isso.'); }
     // ações de operador exigem o app autenticador ativo e a sessão aberta com o código
-    if (achada.operador && !achada.configurar2fa) {
+    if (achada.operador && !achada.configurar2fa && exigir2faOperador) {
       if (!u.totp_ativo) throw new Erro(403, 'Ative a verificação em duas etapas (app autenticador) para usar as funções de operador.', 'configurar_2fa');
       if (!u.dois_fatores) throw new Erro(403, 'Saia e entre de novo com o código do app autenticador.', 'precisa_2fa');
     }

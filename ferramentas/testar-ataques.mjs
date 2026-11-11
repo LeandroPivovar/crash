@@ -422,6 +422,33 @@ try {
   loc.kill(); await dormir(300);
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbArq + '-local' + s); } catch {} }
 
+  console.log('--- operador sem autenticador por configuração');
+  const dbSem2fa = dbArq + '-sem2fa';
+  const sem2faSrv = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), '8199'], {
+    env: { ...process.env, ARENA_DB: dbSem2fa, ARENA_BACKUP_HORAS: '0', ARENA_SMTP_URL: '',
+      ARENA_ADMIN_EMAIL: OP.email, ARENA_ADMIN_SENHA: OP.senha, ARENA_ADMIN_2FA: '0' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let logSem2fa = '';
+  sem2faSrv.stdout.on('data', d => { logSem2fa += d; });
+  for (let i = 0; i < 100 && !logSem2fa.includes('Crash Arena em'); i++) await dormir(100);
+  const baseSem2fa = 'http://localhost:8199';
+  const adminSem2fa = cliente(baseSem2fa);
+  const entradaSem2fa = await adminSem2fa('POST', '/api/login', OP);
+  conferir('operador entra com senha e recebe acesso sem autenticador', entradaSem2fa.s === 200 && entradaSem2fa.j.usuario?.acessoOperador === true);
+  conferir('operador usa a API administrativa sem autenticador', (await adminSem2fa('GET', '/api/admin/saques')).s === 200);
+  conferir('sem sessão continua sem acesso administrativo', (await cliente(baseSem2fa)('GET', '/api/admin/saques')).s === 401);
+  const jogadorSem2fa = await novaConta('Sem2fa', baseSem2fa);
+  conferir('jogador continua sem acesso administrativo', (await jogadorSem2fa('GET', '/api/admin/saques')).s === 403);
+  const bancoSem2fa = bancoDe(dbSem2fa);
+  bancoSem2fa.prepare('UPDATE usuarios SET totp_ativo = 1, totp_segredo = ? WHERE email = ?').run(totp.novoSegredo(), OP.email);
+  await adminSem2fa('POST', '/api/sair');
+  const reentradaSem2fa = await adminSem2fa('POST', '/api/login', OP);
+  conferir('autenticador antigo do operador não bloqueia o login quando desligado', reentradaSem2fa.s === 200 && reentradaSem2fa.j.usuario?.acessoOperador === true && !reentradaSem2fa.j.precisa2fa);
+  bancoSem2fa.close();
+  sem2faSrv.kill(); await dormir(300);
+  for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbSem2fa + s); } catch {} }
+
   console.log('--- Pix real (CajuPay de mentira, aqui no computador)');
   // um "CajuPay" falso na porta 8195 e um Arena ligado nele (porta 8196, admin local para aprovar saques)
   const fake = { pagamentos: new Map(), pagos: new Set(), saques: [], pedidos: [] };
