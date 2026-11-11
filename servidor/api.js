@@ -174,7 +174,7 @@ const publico = u => ({
   tutorialPendente: !u.tutorial_feito && !u.operador,
   acessoOperador: !!u.operador && (!exigir2faOperador || (ativacao2faOpcional && !u.totp_ativo) || (!!u.totp_ativo && !!u.dois_fatores)),
   ativacao2faOpcional: !!u.operador && ativacao2faOpcional,
-  ...(u.visitante ? {} : { doisFatoresAtivo: !!u.totp_ativo, sessaoComDoisFatores: !!u.dois_fatores }),
+  ...(u.visitante ? {} : { doisFatoresAtivo: !!u.operador && !!u.totp_ativo, sessaoComDoisFatores: !!u.operador && !!u.dois_fatores }),
 });
 
 // ---------- segundo fator (app autenticador; obrigatório para o operador) ----------
@@ -428,7 +428,7 @@ rota('POST', '/api/login', {}, ({ corpo, res, req, ip }) => {
   baldes.delete(`login-conta:${email}`);
   if (CONFIRMAR_EMAIL && !u.email_confirmado) throw new Erro(403, 'Confirme seu e-mail para entrar. Procure o link que enviamos (veja também o spam).', 'confirmar_email');
   // conta com app autenticador: a senha certa só abre um desafio; a sessão vem depois do código
-  if (u.totp_ativo && (!u.operador || exigir2faOperador)) {
+  if (u.operador && u.totp_ativo && exigir2faOperador) {
     const desafio = crypto.randomBytes(24).toString('base64url');
     desafios.set(desafio, { uid: u.id, ate: agora() + 5 * 60e3, tentativas: 0 });
     auditar('login_senha_ok_esperando_codigo', { u, ip });
@@ -534,8 +534,8 @@ rota('POST', '/api/confirmar', {}, ({ corpo, res, req, ip }) => {
     db.prepare('UPDATE confirmacoes SET usado = 1 WHERE usuario_id = ?').run(u.id);
   });
   auditar('email_confirmado', { u, ip });
-  // conta com app autenticador ou operador: confirma, mas a sessão vem pelo login normal (com o código)
-  if (u.totp_ativo || u.operador) return { ok: true, entrar: true };
+  // Operador confirma o e-mail e entra pelo login administrativo.
+  if (u.operador) return { ok: true, entrar: true };
   criarSessao(res, req, u.id);
   return { ok: true, usuario: publico({ ...u, email_confirmado: 1 }) };
 });
@@ -850,7 +850,7 @@ rota('POST', '/api/partidas/([\\w-]+)/encerrar', { login: true, corpoMax: CORPO_
 // Ativar o app autenticador (obrigatório para o operador antes de qualquer ação).
 // 1) iniciar: confirma a senha, gera o segredo (ainda inativo) e devolve o link otpauth:// para o app;
 // 2) confirmar: digita o código do app; ativa e devolve 8 códigos de reserva (mostrados uma vez).
-// As mesmas funções atendem /api/admin/2fa/* (página do operador) e /api/conta/2fa/* (jogador).
+// Ativação do autenticador disponível apenas nas rotas administrativas.
 // Operador: além da senha, cadastrar o app exige o código de ativação que só existe no servidor
 // (dados/codigo-ativacao-operador.txt, legível só pelo serviço). Assim, quem descobrir a senha do operador antes
 // de ele ativar o app não consegue cadastrar o próprio celular e tomar a conta.
@@ -904,20 +904,6 @@ function confirmar2fa({ u, corpo, ip }) {
 }
 rota('POST', '/api/admin/2fa/iniciar', { operador: true, configurar2fa: true }, iniciar2fa);
 rota('POST', '/api/admin/2fa/confirmar', { operador: true, configurar2fa: true }, confirmar2fa);
-rota('POST', '/api/conta/2fa/iniciar', { login: true }, iniciar2fa);
-rota('POST', '/api/conta/2fa/confirmar', { login: true }, confirmar2fa);
-// Desligar (só jogador; o operador não pode ficar sem): senha + código do app ou de reserva.
-rota('POST', '/api/conta/2fa/desativar', { login: true }, ({ u, corpo, ip }) => {
-  if (u.operador) throw new Erro(403, 'A conta de operador não pode desligar a verificação em duas etapas.');
-  if (!u.totp_ativo) throw new Erro(409, 'A verificação em duas etapas não está ativa.');
-  limitar(`2fa-config:${u.id}`, 10, 15 * 60e3);
-  if (!confereSenha(String(corpo.senha || ''), u.senha_hash)) { auditar('2fa_senha_errada', { u, ip }); throw new Erro(401, 'Senha incorreta.'); }
-  if (!conferirSegundoFator(u, corpo.codigo)) { auditar('codigo_2fa_errado', { u, ip }); throw new Erro(401, 'Código incorreto.'); }
-  db.prepare("UPDATE usuarios SET totp_ativo = 0, totp_segredo = NULL, codigos_reserva = '[]' WHERE id = ?").run(u.id);
-  auditar('2fa_desativado', { u, ip });
-  return { ok: true };
-});
-
 rota('GET', '/api/admin/local', {}, ({ req }) => ({ local: adminLocal(req) }));
 // regras (o jogo lê as da partida; o operador edita as atuais)
 rota('GET', '/api/regras', {}, () => ({ regras: regrasAtuais() }));
@@ -1157,7 +1143,7 @@ const cicloDe = (feitas, regras) => {
 };
 const usuarioResumo = r => ({
   id: r.id, nome: r.nome, email: r.email || '', visitante: !!r.visitante, operador: !!r.operador, criado: r.criado,
-  doisFatores: !!r.totp_ativo, bonusUsado: !!r.bonus_deposito,
+  doisFatores: !!r.operador && !!r.totp_ativo, bonusUsado: !!r.bonus_deposito,
   saldo: r.saldo, depositado: r.depositado, bonus: r.bonus, sacado: r.sacado, resultado: r.resultado, lucroCasa: -r.resultado,
   partidas: r.partidas, ultimaPartida: r.ultima_partida, cicloProxima: (r.partidas % cfg.FLUXO_TAM) + 1,
 });

@@ -47,10 +47,9 @@ O que o navegador manda e o servidor **ignora para pagar**: número de frutas, d
 - Cadastrar o app do operador exige, além da senha, o código de ativação que só existe no servidor (`dados/codigo-ativacao-operador.txt`, legível só pelo serviço; muda a cada reinício e some depois da ativação). Quem só descobrir a senha não toma a conta.
 - Perdeu o celular e os códigos: quem tem acesso ao servidor reinicia com `ARENA_ADMIN_RESETAR_2FA=1` e o operador cadastra o app de novo (fica registrado).
 
-**Jogadores: verificação em duas etapas e saque:**
-- Qualquer conta (não visitante) ativa o app autenticador em **Minha conta** (senha → chave → código → 8 códigos de reserva). Com o app ativo, o login pede o código depois da senha.
+**Jogadores: login e saque:**
+- Jogadores entram com e-mail e senha. O cadastro antigo de autenticador não exige código no login, e as rotas de ativação de autenticador de jogador foram removidas.
 - **Sacar exige sessão de jogador e chave Pix válida.** O pedido reserva o valor e aguarda aprovação do operador. O código do app autenticador não é exigido no pedido.
-- Desligar o app pede a senha e um código.
 
 **Contas:**
 - Força bruta: limite por IP (20 em 10 min) e por conta (10 em 15 min).

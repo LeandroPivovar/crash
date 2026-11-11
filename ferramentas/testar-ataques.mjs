@@ -69,13 +69,7 @@ function jogarComRobo(semente, segundos = 60, nervoso = false) {
   const g = JSON.parse(fs.readFileSync(arq, 'utf8')); fs.unlinkSync(arq);
   return g;
 }
-// ativa o app autenticador de um jogador (senha das contas de teste) e devolve o segredo e os códigos de reserva
 const codigoDoApp = segredo => totp.codigoNoIntervalo(segredo, Math.floor(Date.now() / 30000));
-async function ativar2fa(c) {
-  const { segredo } = (await c('POST', '/api/conta/2fa/iniciar', { senha: 'senha-boa-123' })).j;
-  const r = (await c('POST', '/api/conta/2fa/confirmar', { codigo: codigoDoApp(segredo) })).j;
-  return { segredo, reserva: r.codigosReserva };
-}
 const passosDe = rle => rle.reduce((a, [, n]) => a + n, 0);
 // Atalhos de teste direto no banco (o depósito real agora é só R$ 5/10/25/50 e passa pelo Pix):
 // creditar = um depósito já pago; jogou = partidas jogadas que empataram (entrada e frutas do mesmo valor).
@@ -126,13 +120,17 @@ try {
   for (let i = 0; i < 8; i++) { tNao.push(await tempo(`naoexiste${i}${Date.now()}@x.com`)); tExiste.push(await tempo(emailT)); }
   const mediana = l => [...l].sort((a, b) => a - b)[l.length >> 1];
   conferir('tempo do login não revela se o e-mail existe', Math.abs(mediana(tExiste) - mediana(tNao)) < 40, `${Math.round(mediana(tExiste))} ms × ${Math.round(mediana(tNao))} ms`);
-  // ladrão com a senha do jogador: com o app ativo, a senha sozinha não abre a sessão
-  const vit = await novaConta('Vitima'); const emailVit = (await vit('GET', '/api/eu')).j.usuario.email;
-  const appV = await ativar2fa(vit);
-  const ladrao = cliente(); const lp = (await ladrao('POST', '/api/login', { email: emailVit, senha: 'senha-boa-123' })).j;
-  conferir('senha certa de jogador com app não abre sessão sozinha', lp.precisa2fa === true && (await ladrao('GET', '/api/eu')).j.usuario === null);
-  conferir('desligar o app sem o código', (await vit('POST', '/api/conta/2fa/desativar', { senha: 'senha-boa-123', codigo: '' })).s === 401);
-  conferir('desligar o app com código mas sem a senha', (await vit('POST', '/api/conta/2fa/desativar', { senha: 'x', codigo: appV.reserva[0] })).s === 401);
+  const vit = await novaConta('Vitima');
+  const vitUsuario = (await vit('GET', '/api/eu')).j.usuario;
+  const emailVit = vitUsuario.email;
+  dbTeste.prepare('UPDATE usuarios SET totp_ativo = 1, totp_segredo = ? WHERE id = ?').run(totp.novoSegredo(), vitUsuario.id);
+  const jogadorAntigo = cliente();
+  const loginAntigo = await jogadorAntigo('POST', '/api/login', { email: emailVit, senha: 'senha-boa-123' });
+  conferir('jogador com autenticador antigo entra só com senha', loginAntigo.s === 200 && !loginAntigo.j.precisa2fa && loginAntigo.j.usuario?.doisFatoresAtivo === false);
+  for (const acao of ['iniciar', 'confirmar', 'desativar']) {
+    conferir('autenticador de jogador removido: ' + acao, (await vit('POST', '/api/conta/2fa/' + acao, {})).s === 404);
+  }
+  conferir('jogador não ativa autenticador pela rota administrativa', (await vit('POST', '/api/admin/2fa/iniciar', { senha: 'senha-boa-123' })).s === 403);
   // link de recuperação: o endereço vem de ARENA_SITE_URL, não do cabeçalho Host (que um atacante pode forjar)
   await new Promise(ok => { const r = http.request({ host: 'localhost', port: porta, path: '/api/recuperar', method: 'POST',
     headers: { Host: 'site-do-ladrao.com', 'Content-Type': 'application/json', 'X-Arena': '1' } }, res => { res.resume(); res.on('end', ok); }); r.end(JSON.stringify({ email: emailVit })); });
@@ -150,7 +148,6 @@ try {
   conferir('depósito fora dos valores (R$ 20)', (await a0('POST', '/api/carteira/deposito', { valor: 2000 })).s === 400);
   await a('POST', '/api/carteira/deposito', { valor: 5000 });
   const PIX = { chaveTipo: 'cpf', chave: CPF_OK };
-  conferir('ativar o app do jogador exige a senha', (await a('POST', '/api/conta/2fa/iniciar', { senha: 'errada-errada' })).s === 401);
   const semJogar = await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX });
   conferir('saque bloqueado antes de jogar o valor depositado', semJogar.s === 403 && semJogar.j.codigo === 'rodada' && (await a('GET', '/api/carteira')).j.rodada.falta === 5000);
   await jogou(a, 4000);
@@ -541,7 +538,6 @@ try {
   conferir('sem webhook, a consulta à CajuPay credita o Pix pago', consultado.deposito?.estado === 'pago' && consultado.saldo === 11000);
   conferir('outro jogador não vê o Pix de ninguém', (await (await novaConta('Curioso', basePix))('GET', `/api/carteira/deposito/${dp2.id}`)).s === 404);
   // saque com envio automático: aprovar manda o Pix; se o banco recusar, o valor volta
-  await ativar2fa(px);
   await jogou(px, 11000, bancoDe(dbPix));
   const pedSaque = await px('POST', '/api/carteira/saque', { valor: 3000, chaveTipo: 'telefone', chave: '(21) 99876-5432', documento: CPF_OK });
   conferir('saque por telefone pedido (valor reservado)', pedSaque.s === 200 && pedSaque.j.saldo === 8000 && pedSaque.j.saque.chaveFinal === '5432');
