@@ -449,6 +449,40 @@ try {
   sem2faSrv.kill(); await dormir(300);
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbSem2fa + s); } catch {} }
 
+  console.log('--- autenticador opcional do operador');
+  const dbOpcional = dbArq + '-opcional';
+  const opcionalSrv = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), '8199'], {
+    env: { ...process.env, ARENA_DB: dbOpcional, ARENA_BACKUP_HORAS: '0', ARENA_SMTP_URL: '',
+      ARENA_ADMIN_EMAIL: OP.email, ARENA_ADMIN_SENHA: OP.senha, ARENA_ADMIN_2FA: 'opcional' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let logOpcional = '';
+  opcionalSrv.stdout.on('data', d => { logOpcional += d; });
+  for (let i = 0; i < 100 && !logOpcional.includes('Crash Arena em'); i++) await dormir(100);
+  const baseOpcional = 'http://localhost:8199';
+  const adminOpcional = cliente(baseOpcional), outraSessao = cliente(baseOpcional);
+  const loginOpcional = await adminOpcional('POST', '/api/login', OP);
+  conferir('operador escolhe quando ativar o autenticador', loginOpcional.s === 200 && loginOpcional.j.usuario?.ativacao2faOpcional === true && (await adminOpcional('GET', '/api/admin/saques')).s === 200);
+  await outraSessao('POST', '/api/login', OP);
+  conferir('ativação opcional exige a senha', (await adminOpcional('POST', '/api/admin/2fa/iniciar', { senha: 'errada' })).s === 401);
+  const inicioOpcional = await adminOpcional('POST', '/api/admin/2fa/iniciar', { senha: OP.senha });
+  conferir('operador inicia a ativação sem código do servidor', inicioOpcional.s === 200 && !!inicioOpcional.j.segredo);
+  conferir('gerar chave ainda não exige código no acesso', (await adminOpcional('GET', '/api/admin/saques')).s === 200);
+  const codigoOpcional = codigoDoApp(inicioOpcional.j.segredo);
+  const codigoErrado = String((Number(codigoOpcional) + 1) % 1000000).padStart(6, '0');
+  conferir('ativação opcional rejeita código do app errado', (await adminOpcional('POST', '/api/admin/2fa/confirmar', { codigo: codigoErrado })).s === 400);
+  const ativadoOpcional = await adminOpcional('POST', '/api/admin/2fa/confirmar', { codigo: codigoDoApp(inicioOpcional.j.segredo) });
+  conferir('ativação opcional confirma o app e entrega códigos de reserva', ativadoOpcional.s === 200 && ativadoOpcional.j.codigosReserva?.length === 8);
+  conferir('sessão que ativou o app continua com acesso', (await adminOpcional('GET', '/api/admin/saques')).s === 200);
+  conferir('ativar o app encerra outras sessões', (await outraSessao('GET', '/api/admin/saques')).s === 401);
+  await adminOpcional('POST', '/api/sair');
+  const desafioOpcional = await adminOpcional('POST', '/api/login', OP);
+  conferir('após ativação a senha sozinha pede segundo fator', desafioOpcional.j.precisa2fa === true && (await adminOpcional('GET', '/api/admin/saques')).s === 401);
+  const codigoLogin = await adminOpcional('POST', '/api/login/2fa', { desafio: desafioOpcional.j.desafio, codigo: ativadoOpcional.j.codigosReserva[0] });
+  conferir('login com segundo fator libera o painel', codigoLogin.s === 200 && codigoLogin.j.usuario?.acessoOperador === true && (await adminOpcional('GET', '/api/admin/saques')).s === 200);
+  opcionalSrv.kill(); await dormir(300);
+  for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbOpcional + s); } catch {} }
+
   console.log('--- Pix real (CajuPay de mentira, aqui no computador)');
   // um "CajuPay" falso na porta 8195 e um Arena ligado nele (porta 8196, admin local para aprovar saques)
   const fake = { pagamentos: new Map(), pagos: new Set(), saques: [], pedidos: [] };

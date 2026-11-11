@@ -39,6 +39,7 @@ O que o navegador manda e o servidor **ignora para pagar**: número de frutas, d
 
 **Operador (quem muda regras e aprova pagamentos):**
 - O comportamento abaixo é o padrão. Com `ARENA_ADMIN_2FA=0` no servidor, o operador entra com e-mail e senha e acessa as funções administrativas sem o autenticador.
+- Com `ARENA_ADMIN_2FA=opcional`, o operador escolhe quando ativar o autenticador no painel, confirmando a senha e o código do app. Após a ativação, os próximos logins exigem o código. Nesse modo, a ativação dispensa o código que fica no servidor.
 - Verificação em duas etapas **obrigatória**: código de 6 dígitos de app autenticador (TOTP, padrão RFC 6238; Google Authenticator, Microsoft Authenticator, Authy…). Sem o app ativo, nenhuma ação de operador funciona; o próprio site guia a ativação na página de regras.
 - A senha certa só abre um "desafio" de 5 minutos (até 5 códigos errados); a sessão só nasce com o código. Cada código vale uma vez (não dá para reaproveitar um código visto por cima do ombro).
 - 8 códigos de reserva de uso único, mostrados uma vez na ativação, para o caso de perder o celular.

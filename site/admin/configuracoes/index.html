@@ -80,15 +80,20 @@
   <p class="sub">Regras do Desafio solo (operador). Ficam salvas no servidor e valem para todas as partidas criadas depois de salvar.</p>
   <section id="sem-acesso" hidden><h2>Acesso restrito</h2><p id="sem-acesso-msg">Só a conta de operador pode mudar as regras.</p><a class="btn" href="/">Entrar com a conta de operador</a></section>
 
+  <section id="seguranca-opcional" hidden>
+    <h2>Segurança da conta</h2>
+    <p>Você pode ativar a verificação em duas etapas. Depois de ativada, o login pedirá o código do app autenticador.</p>
+    <div class="actions"><button type="button" class="btn" id="abrir-2fa">Ativar verificação em duas etapas</button></div>
+  </section>
   <section id="ativar-2fa" hidden>
-    <h2>Verificação em duas etapas (obrigatória)</h2>
-    <p>Para mudar regras e aprovar pagamentos, a conta de operador precisa de um segundo fator: um código de 6 dígitos que muda a cada 30 segundos num app do celular (Google Authenticator, Microsoft Authenticator, Authy…).</p>
+    <h2 id="titulo-2fa">Verificação em duas etapas (obrigatória)</h2>
+    <p id="explica-2fa">Para mudar regras e aprovar pagamentos, a conta de operador precisa de um segundo fator: um código de 6 dígitos que muda a cada 30 segundos num app do celular (Google Authenticator, Microsoft Authenticator, Authy…).</p>
     <div id="passo-1">
       <div class="field">
         <label for="senha-2fa">Confirme sua senha<small>Para gerar a chave do app.</small></label>
         <div class="ctrl"><input type="password" id="senha-2fa" autocomplete="current-password" class="txt"></div>
       </div>
-      <div class="field">
+      <div class="field" id="campo-ativacao-2fa">
         <label for="ativacao-2fa">Código de ativação<small>Fica no servidor, em dados/codigo-ativacao-operador.txt (só quem administra o servidor vê). Sem ele, a senha sozinha não cadastra o app.</small></label>
         <div class="ctrl"><input id="ativacao-2fa" autocomplete="off" class="txt" spellcheck="false"></div>
       </div>
@@ -379,6 +384,17 @@ if (local) {
 }
 
 // ---- ativação do app autenticador ----
+if (usuario?.acessoOperador && usuario.ativacao2faOpcional && !usuario.doisFatoresAtivo) {
+  $('seguranca-opcional').hidden = false;
+  $('titulo-2fa').textContent = 'Ativar verificação em duas etapas';
+  $('explica-2fa').textContent = 'Confirme sua senha e adicione a chave ao app autenticador. A verificação só será ativada depois que você confirmar o código do app.';
+  $('campo-ativacao-2fa').hidden = true;
+}
+$('abrir-2fa').addEventListener('click', () => {
+  $('seguranca-opcional').hidden = true;
+  $('ativar-2fa').hidden = false;
+  $('senha-2fa').focus();
+});
 const msg2fa = t => { $('status-2fa').textContent = t || ''; };
 $('gerar-2fa').addEventListener('click', async () => {
   msg2fa();

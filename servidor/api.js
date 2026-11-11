@@ -168,10 +168,12 @@ function usuarioDaSessao(req) {
   return s;
 }
 const exigir2faOperador = process.env.ARENA_ADMIN_2FA !== '0';
+const ativacao2faOpcional = process.env.ARENA_ADMIN_2FA === 'opcional';
 const publico = u => ({
   id: u.id, nome: u.nome, email: u.email || '', visitante: !!u.visitante, operador: !!u.operador,
   tutorialPendente: !u.tutorial_feito && !u.operador,
-  acessoOperador: !!u.operador && (!exigir2faOperador || (!!u.totp_ativo && !!u.dois_fatores)),
+  acessoOperador: !!u.operador && (!exigir2faOperador || (ativacao2faOpcional && !u.totp_ativo) || (!!u.totp_ativo && !!u.dois_fatores)),
+  ativacao2faOpcional: !!u.operador && ativacao2faOpcional,
   ...(u.visitante ? {} : { doisFatoresAtivo: !!u.totp_ativo, sessaoComDoisFatores: !!u.dois_fatores }),
 });
 
@@ -875,7 +877,7 @@ function iniciar2fa({ u, corpo, ip }) {
   limitar(`2fa-config:${u.id}`, 10, 15 * 60e3);
   if (u.totp_ativo) throw new Erro(409, 'O app autenticador já está ativo nesta conta.');
   if (!confereSenha(String(corpo.senha || ''), u.senha_hash)) { auditar('2fa_senha_errada', { u, ip }); throw new Erro(401, 'Senha incorreta.'); }
-  if (u.operador && !confereCodigoAtivacao(corpo.codigoAtivacao)) {
+  if (u.operador && !ativacao2faOpcional && !confereCodigoAtivacao(corpo.codigoAtivacao)) {
     auditar('2fa_codigo_ativacao_errado', { u, ip });
     throw new Erro(403, 'Código de ativação incorreto. Ele fica no servidor, no arquivo dados/codigo-ativacao-operador.txt.', 'codigo_ativacao');
   }
@@ -1380,8 +1382,8 @@ async function atender(req, res, url) {
     if (achada.operador && !u.operador) { auditar('acesso_negado_operador', { u, ip, detalhe: url }); throw new Erro(403, 'Só o operador pode fazer isso.'); }
     // ações de operador exigem o app autenticador ativo e a sessão aberta com o código
     if (achada.operador && !achada.configurar2fa && exigir2faOperador) {
-      if (!u.totp_ativo) throw new Erro(403, 'Ative a verificação em duas etapas (app autenticador) para usar as funções de operador.', 'configurar_2fa');
-      if (!u.dois_fatores) throw new Erro(403, 'Saia e entre de novo com o código do app autenticador.', 'precisa_2fa');
+      if (!u.totp_ativo && !ativacao2faOpcional) throw new Erro(403, 'Ative a verificação em duas etapas (app autenticador) para usar as funções de operador.', 'configurar_2fa');
+      if (u.totp_ativo && !u.dois_fatores) throw new Erro(403, 'Saia e entre de novo com o código do app autenticador.', 'precisa_2fa');
     }
     const r = await achada.fn({ req, res, corpo, u, m: url.match(achada.padrao), ip });
     enviar(res, 200, r);
