@@ -447,7 +447,7 @@ try {
     env: { ...process.env, ARENA_DB: dbPix, ARENA_BACKUP_HORAS: '0', ARENA_SMTP_URL: '', ARENA_SITE_URL: '', ARENA_CONTAS_POR_HORA: '100',
       ARENA_ADMIN_EMAIL: 'op2@teste.local', ARENA_ADMIN_SENHA: 'senha-do-operador-123',
       CAJUPAY_BASE_URL: 'http://127.0.0.1:8195', CAJUPAY_API_KEY: 'gpk_teste', CAJUPAY_API_SECRET: 'gsk_teste',
-      CAJUPAY_WEBHOOK_SECRET: 'cwhsec_teste', CAJUPAY_SAQUE_AUTOMATICO: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+      CAJUPAY_WEBHOOK_SECRET: 'cwhsec_teste', CAJUPAY_SAQUE_AUTOMATICO: '1', CAJUPAY_REFERENCIA_PREFIXO: 'crashgo-teste' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let logPix = ''; pixSrv.stdout.on('data', d => { logPix += d; }); pixSrv.stderr.on('data', d => { logPix += d; });
   for (let i = 0; i < 100 && !logPix.includes('Crash Arena em'); i++) await dormir(100);
@@ -463,7 +463,7 @@ try {
   const dp = (await px('POST', '/api/carteira/deposito', { valor: 2500 })).j;
   conferir('depósito gera Pix (copia e cola) e o saldo ainda não entra', dp.deposito?.estado === 'pendente' && /PIXTESTE/.test(dp.deposito.pixCopiaCola) && (await px('GET', '/api/eu')).j.saldo === 0);
   const pedPix = fake.pedidos.find(p => p.url === '/api/payments/pix');
-  conferir('chamada à CajuPay com chaves e Idempotency-Key, sem o segredo no site', pedPix?.chave === 'gpk_teste' && /^deposito-\d+$/.test(pedPix.idem || '') && !JSON.stringify(dp).includes('gsk_teste'));
+  conferir('chamada à CajuPay com chaves e Idempotency-Key, sem o segredo no site', pedPix?.chave === 'gpk_teste' && /^crashgo-teste-deposito-\d+$/.test(pedPix.idem || '') && !JSON.stringify(dp).includes('gsk_teste'));
   const idPay = [...fake.pagamentos.keys()][0];
   const pago = valor => ({ id: 'evt1', type: 'pix.payment.paid', data: { object: { cajupay_payment_id: idPay, amount_cents: valor, status: 'paid' } } });
   conferir('webhook sem assinatura é recusado', (await webhook(pago(2500), '')).s === 401);
@@ -491,12 +491,14 @@ try {
   const apPix = await opPix('POST', `/api/admin/saques/${sqPix.id}`, { decisao: 'aprovar' });
   const envio = fake.saques[0] || {};
   conferir('aprovar envia o Pix pela CajuPay (telefone +55 e CPF do titular)', apPix.s === 200 && apPix.j.saque.estado === 'processando' && envio.pix_key === '+5521998765432' && envio.pix_key_type === 'phone' && envio.key_owner_document === CPF_OK && envio.amount_cents === 3000);
-  const falha = { id: 'evt2', type: 'payout.failed', data: { object: { external_ref: `saque-${sqPix.id}`, status: 'failed', last_error: 'chave inexistente' } } };
+  const falha = { id: 'evt2', type: 'payout.failed', data: { object: { external_ref: `crashgo-teste-saque-${sqPix.id}`, status: 'failed', last_error: 'chave inexistente' } } };
+  const outroSite = await webhook({ ...falha, data: { object: { ...falha.data.object, external_ref: `saque-${sqPix.id}` } } });
+  conferir('webhook de outra instalação não altera o saque', outroSite.j?.resultado === 'saque_desconhecido' && (await px('GET', '/api/carteira')).j.saques.find(s => s.id === sqPix.id)?.estado === 'processando');
   const f1 = await webhook(falha), f2 = await webhook(falha);
   conferir('saque recusado pelo banco devolve o valor uma vez só', f1.j?.resultado === 'saque_devolvido' && f2.j?.resultado === 'ja_tratado' && (await px('GET', '/api/eu')).j.saldo === 11000);
   const ped2 = await px('POST', '/api/carteira/saque', { valor: 2000, chaveTipo: 'cpf', chave: CPF_OK });
   await opPix('POST', `/api/admin/saques/${ped2.j.saque.id}`, { decisao: 'aprovar' });
-  const okW = await webhook({ id: 'evt3', type: 'payout.paid', data: { object: { external_ref: `saque-${ped2.j.saque.id}`, status: 'paid' } } });
+  const okW = await webhook({ id: 'evt3', type: 'payout.paid', data: { object: { external_ref: `crashgo-teste-saque-${ped2.j.saque.id}`, status: 'paid' } } });
   const meusPx = (await px('GET', '/api/carteira')).j.saques;
   conferir('saque pago pelo banco fica como pago', okW.j?.resultado === 'saque_pago' && meusPx.find(x => x.id === ped2.j.saque.id)?.estado === 'aprovado' && (await px('GET', '/api/eu')).j.saldo === 9000);
   pixSrv.kill(); fakeSrv.close(); await dormir(300);

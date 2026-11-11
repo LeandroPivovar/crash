@@ -1016,8 +1016,8 @@ function webhookCajuPay(evento) {
     return creditarDeposito(d.id, 'webhook') ? 'creditado' : 'ja_creditado';
   }
   if (tipo === 'payout.paid' || tipo === 'payout.failed') {
-    const ref = /^saque-(\d+)$/.exec(String(o.external_ref || o.customer_ref || ''));
-    const s = ref ? db.prepare('SELECT * FROM saques WHERE id = ?').get(Number(ref[1]))
+    const saqueId = caju.idSaqueDaReferencia(o.external_ref || o.customer_ref || '');
+    const s = saqueId !== null ? db.prepare('SELECT * FROM saques WHERE id = ?').get(saqueId)
       : db.prepare('SELECT * FROM saques WHERE gateway_id = ?').get(String(o.cajupay_payout_id || ''));
     if (!s) return 'saque_desconhecido';
     if (tipo === 'payout.paid') return saquePago(s.id) ? 'saque_pago' : 'ja_tratado';

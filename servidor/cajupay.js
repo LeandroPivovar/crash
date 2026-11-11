@@ -4,6 +4,7 @@
 // Variáveis (só no servidor, em /opt/arena/arena.env — nunca no site nem no GitHub):
 //   CAJUPAY_API_KEY      chave pública (gpk_...)
 //   CAJUPAY_API_SECRET   segredo (gsk_...)
+//   CAJUPAY_REFERENCIA_PREFIXO  identifica a instalação ao compartilhar a mesma conta CajuPay.
 //   CAJUPAY_WEBHOOK_SECRET  segredo de assinatura do webhook (cwhsec_...). Sem ele, o servidor cadastra o webhook
 //                        sozinho ao subir e guarda o segredo em cajupay-webhook-secret.txt, na pasta do banco.
 //   CAJUPAY_SAQUE_AUTOMATICO=1  aprovar um saque no admin manda o Pix pela CajuPay (precisa de KYC aprovado
@@ -13,6 +14,15 @@ const crypto = require('crypto'), fs = require('fs'), path = require('path');
 
 const BASE = (process.env.CAJUPAY_BASE_URL || 'https://api.cajupay.com.br').replace(/\/+$/, '');
 const CHAVE = process.env.CAJUPAY_API_KEY || '', SEGREDO = process.env.CAJUPAY_API_SECRET || '';
+const prefixo = (process.env.CAJUPAY_REFERENCIA_PREFIXO || '').trim();
+if (prefixo && !/^[a-zA-Z0-9_-]{1,64}$/.test(prefixo)) throw new Error('CAJUPAY_REFERENCIA_PREFIXO inválido.');
+const referencia = (tipo, id) => `${prefixo ? prefixo + '-' : ''}${tipo}-${id}`;
+function idSaqueDaReferencia(valor) {
+  const inicio = referencia('saque', '');
+  if (!String(valor).startsWith(inicio)) return null;
+  const id = String(valor).slice(inicio.length);
+  return /^\d+$/.test(id) ? Number(id) : null;
+}
 // junto do banco (em produção /opt/arena/dados, a única pasta em que o serviço pode escrever)
 const arqSegredoWebhook = path.join(path.dirname(require('./banco').arquivo), 'cajupay-webhook-secret.txt');
 
@@ -47,22 +57,22 @@ async function chamar(metodo, rota, corpo, { idempotencia } = {}) {
 const criarPix = ({ valor, depositoId, usuario, urlCheckout }) => chamar('POST', '/api/payments/pix', {
   amount_cents: valor, currency: 'BRL',
   description: `Depósito Crash Arena #${depositoId}`,
-  product_ref: `deposito-${depositoId}`, customer_ref: `usuario-${usuario.id}`,
+  product_ref: referencia('deposito', depositoId), customer_ref: referencia('usuario', usuario.id),
   ...(urlCheckout ? { partner_checkout_url: urlCheckout } : {}),
   consumer: { name: usuario.nome, ...(usuario.email ? { email: usuario.email } : {}) },
   metadata: { deposito_id: String(depositoId), usuario_id: String(usuario.id) },
-}, { idempotencia: `deposito-${depositoId}` });
+}, { idempotencia: referencia('deposito', depositoId) });
 
 const consultarPagamento = id => chamar('GET', `/api/payments/${encodeURIComponent(id)}`);
 
 // Saque Pix para a chave do jogador (CPF ou telefone). idempotencia = id do saque.
 const enviarSaque = ({ saqueId, valor, chaveTipo, chave, documentoTitular }) => chamar('POST', '/api/payouts', {
-  amount_cents: valor, currency: 'BRL', wallet_kind: 'main', external_ref: `saque-${saqueId}`,
+  amount_cents: valor, currency: 'BRL', wallet_kind: 'main', external_ref: referencia('saque', saqueId),
   destination: { method: 'dict' },
   pix_key: chaveTipo === 'telefone' ? `+55${chave}` : chave,
   pix_key_type: chaveTipo === 'telefone' ? 'phone' : 'cpf',
   ...(chaveTipo === 'telefone' && documentoTitular ? { key_owner_document: documentoTitular } : {}),
-}, { idempotencia: `saque-${saqueId}` });
+}, { idempotencia: referencia('saque', saqueId) });
 
 // ---------- webhook ----------
 function segredoWebhook() {
@@ -90,4 +100,4 @@ async function registrarWebhook(url) {
   return { ok: !!segredoWebhook() };
 }
 
-module.exports = { configurado, saqueAutomatico, criarPix, consultarPagamento, enviarSaque, conferirAssinatura, registrarWebhook, segredoWebhook, ErroGateway };
+module.exports = { configurado, saqueAutomatico, criarPix, consultarPagamento, enviarSaque, conferirAssinatura, registrarWebhook, segredoWebhook, idSaqueDaReferencia, ErroGateway };
