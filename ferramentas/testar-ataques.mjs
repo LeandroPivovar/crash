@@ -340,11 +340,12 @@ try {
   const perdeu = async (c, v) => dbTeste.prepare("INSERT INTO movimentos (usuario_id, tipo, valor, descricao, criado) VALUES (?, 'entrada', ?, 'Entrada (teste)', ?)").run(await idDe(c), -v, Date.now());
   await perdeu(ind1, 4000);
   let rP = (await op('GET', `/api/admin/indicacoes/${lP.id}`)).j;
-  conferir('perdas menores que o bônus: comissão zero', rP.indicacao.resumo.lucroCasa === 4000 && rP.indicacao.resumo.base === 0 && rP.indicacao.resumo.comissao === 0 && rP.indicacao.resumo.cliques === 1,
+  conferir('perdas menores que o bônus: comissão zero', rP.indicacao.resumo.lucroCasa === -3500 && rP.indicacao.resumo.base === 0 && rP.indicacao.resumo.comissao === 0 && rP.indicacao.resumo.cliques === 1,
     `cliques ${rP.indicacao.resumo.cliques}, base ${rP.indicacao.resumo.base}`);
   await perdeu(ind1, 6000);
   rP = (await op('GET', `/api/admin/indicacoes/${lP.id}`)).j;
   conferir('comissão sobre perdas: 10% × (100 − 75 de bônus) = R$ 2,50', rP.indicacao.resumo.base === 2500 && rP.indicacao.resumo.comissao === 250 && rP.usuarios.length === 1 && rP.usuarios[0].id === ind1Id
+    && rP.usuarios[0].lucroCasa === 2500 && rP.usuarios[0].lucroCasa <= rP.usuarios[0].depositado
     && !JSON.stringify(rP).includes('senha_hash'));
   const ind2 = await cadRef('Sacador', lS.codigo);
   await creditar(ind2, 5000);

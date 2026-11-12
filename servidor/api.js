@@ -1091,8 +1091,9 @@ function resumoIndicacao(l) {
       COALESCE(SUM((SELECT COALESCE(SUM(valor), 0) FROM saques s WHERE s.usuario_id = u.id AND s.estado IN ('pendente','processando'))), 0) AS saquePendente,
       COALESCE(SUM((SELECT COUNT(*) FROM partidas p WHERE p.usuario_id = u.id AND p.estado = 'encerrada')), 0) AS partidas
     FROM usuarios u WHERE u.indicacao_id = ?`).get(l.id);
-  const lucroCasa = -r.resultado;
-  const base = l.tipo === 'saque' ? r.sacado : Math.max(0, lucroCasa - r.bonus);
+  // lucro da casa = o que perderam jogando − o bônus que a casa deu (= depositado − sacado/pedido − saldo)
+  const lucroCasa = -r.resultado - r.bonus;
+  const base = l.tipo === 'saque' ? r.sacado : Math.max(0, lucroCasa);
   return {
     cliques: l.cliques, cadastros: r.cadastros, depositantes: r.depositantes, depositado: r.depositado, bonus: r.bonus,
     sacado: r.sacado, saquePendente: r.saquePendente, saldos: r.saldos, partidas: r.partidas, lucroCasa,
@@ -1195,7 +1196,10 @@ const cicloDe = (feitas, regras) => {
 const usuarioResumo = r => ({
   id: r.id, nome: r.nome, email: r.email || '', visitante: !!r.visitante, operador: !!r.operador, criado: r.criado,
   doisFatores: !!r.operador && !!r.totp_ativo, bonusUsado: !!r.bonus_deposito,
-  saldo: r.saldo, depositado: r.depositado, bonus: r.bonus, sacado: r.sacado, resultado: r.resultado, lucroCasa: -r.resultado,
+  saldo: r.saldo, depositado: r.depositado, bonus: r.bonus, sacado: r.sacado, resultado: r.resultado,
+  // lucro da casa com a pessoa: o que ela perdeu jogando menos o bônus (que é dinheiro da casa). É o mesmo que
+  // depositado − sacado/pedido − saldo, então nunca passa do que ela depositou.
+  lucroCasa: -r.resultado - r.bonus,
   partidas: r.partidas, ultimaPartida: r.ultima_partida, cicloProxima: (r.partidas % cfg.FLUXO_TAM) + 1,
   // conta que nunca teve depósito pago: o que ela tem/jogou é dinheiro de teste (de antes do Pix)
   pagou: !!db.prepare("SELECT 1 FROM depositos WHERE usuario_id = ? AND estado = 'pago' LIMIT 1").get(r.id),
@@ -1220,11 +1224,12 @@ rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
       (SELECT COUNT(DISTINCT usuario_id) FROM depositos WHERE estado = 'pago') AS pagantes,
       COALESCE((SELECT SUM(valor) FROM depositos WHERE estado = 'pago'), 0) AS depositado,
       COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU} AND (tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL))), 0) AS resultado,
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU}), 0) AS saldos`).get();
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU}), 0) AS saldos,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU} AND tipo = 'deposito' AND descricao LIKE 'Bônus%'), 0) AS bonus`).get();
   return {
     total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)),
     usuarios: linhas.map(usuarioResumo),
-    geral: { contas: geral.contas, pagantes: geral.pagantes, depositado: geral.depositado, lucroCasa: -geral.resultado, saldos: geral.saldos },
+    geral: { contas: geral.contas, pagantes: geral.pagantes, depositado: geral.depositado, lucroCasa: -geral.resultado - geral.bonus, bonus: geral.bonus, saldos: geral.saldos },
   };
 });
 const alvoUsuario = id => {

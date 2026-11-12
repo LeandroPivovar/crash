@@ -214,7 +214,7 @@ function mostrar() {
     + card('Comissão', brl(r.comissao), `${pct(l.porcentagem)} da base`, 'destaque');
   $('d-conta').innerHTML = l.tipo === 'saque'
     ? `Comissão = ${pct(l.porcentagem)} × saques pagos aos indicados (${brl(r.sacado)}) = <b>${brl(r.comissao)}</b>.`
-    : `Comissão = ${pct(l.porcentagem)} × (lucro da casa ${brl(r.lucroCasa)} − bônus dados ${brl(r.bonus)} = ${brl(r.base)}) = <b>${brl(r.comissao)}</b>. Se os indicados estiverem ganhando, a base fica em zero.`;
+    : `Comissão = ${pct(l.porcentagem)} × lucro da casa com eles (${brl(r.base)}, já sem os ${brl(r.bonus)} de bônus) = <b>${brl(r.comissao)}</b>. Se os indicados estiverem ganhando, a base fica em zero.`;
   desenharUsuarios();
 }
 function desenharUsuarios() {

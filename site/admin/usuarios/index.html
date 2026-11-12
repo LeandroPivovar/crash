@@ -177,7 +177,7 @@ async function carregarLista() {
     estado.pagina = r.pagina;
     $('geral').innerHTML = card('Contas', r.geral.contas, `${r.geral.pagantes} já depositaram`)
       + card('Depositado (Pix)', m(r.geral.depositado), 'dinheiro de verdade que entrou')
-      + card('Lucro da casa (dinheiro real)', sinal(r.geral.lucroCasa), 'só contas que pagaram depósito; moedas de teste ficam de fora')
+      + card('Lucro da casa (dinheiro real)', sinal(r.geral.lucroCasa), 'depositado − sacado/pedido − saldo; o bônus é dinheiro da casa')
       + card('Saldo nas carteiras', m(r.geral.saldos), 'de quem pagou depósito') + card('Encontrados', r.total);
     tb.innerHTML = r.usuarios.length ? r.usuarios.map(u => `<tr data-id="${u.id}" class="${u.id === selecionado ? 'sel' : ''}">
       <td class="mut">#${u.id}</td>
