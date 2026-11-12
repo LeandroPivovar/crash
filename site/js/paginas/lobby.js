@@ -4,6 +4,8 @@ import { cabecalho, atualizarSaldoTopo, toast, quando, comSinal, ocupado } from 
 
 const eu = await arena.exigirLogin('../');
 // conta nova: antes da primeira partida de verdade, o tutorial (curto, sem dinheiro)
+// sem depósito ainda: primeiro a carteira (o tutorial só libera depois do primeiro depósito pago)
+if (!eu.depositou) { location.replace('../carteira/?primeiro=1'); await new Promise(() => {}); }
 if (eu.tutorialPendente) { location.replace('../jogar/?tutorial=1'); await new Promise(() => {}); }
 // partida que ficou aberta (página do jogo fechada): o servidor estorna ou encerra antes do lobby
 const pendente = await arena.resolverPartidaPendente().catch(() => null);

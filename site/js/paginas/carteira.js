@@ -6,6 +6,8 @@ import { cabecalho, atualizarSaldoTopo, toast, quando, comSinal, esc, ocupado } 
 const u = await arena.exigirLogin('../');
 await arena.resolverPartidaPendente().catch(() => null);
 await cabecalho({ ativo: 'carteira' });
+// conta sem depósito pago: o treino e as partidas só liberam depois do primeiro depósito
+document.getElementById('aviso-primeiro').hidden = !!u.depositou;
 
 const $ = id => document.getElementById(id);
 const brl = c => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c / 100);

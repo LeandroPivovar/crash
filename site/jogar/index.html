@@ -232,6 +232,8 @@ const { usuario: jogador } = await arena.sessao().catch(() => ({}));
 // Tutorial (?tutorial=1): trecho curto e lento, só no navegador (sem partida no servidor nem dinheiro). O jogo
 // para em cada lição até a pessoa fazer o gesto certo: pular o buraco, pegar a fruta, desviar do caranguejo.
 const TUTORIAL = new URLSearchParams(location.search).has('tutorial') && !!jogador;
+// o tutorial só libera depois do primeiro depósito pago
+if (TUTORIAL && !jogador.depositou) { location.replace('../carteira/?primeiro=1'); await new Promise(() => {}); }
 const partida = TUTORIAL
   ? { id: null, entrada: 1000, semente: 7, estado: 'criada', regras: { enemiesPerChunk: 1, enemiesStart: 0, pitsMin: 0, pitsMax: 1, fruitMin: 3, fruitMax: 4, speedStart: 0.85, speedGain: 0, speedMax: 0.85 } }
   : jogador ? await arena.partidaAberta().catch(() => null) : null;

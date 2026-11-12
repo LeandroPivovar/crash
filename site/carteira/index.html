@@ -14,6 +14,7 @@
     <div class="badge"><span>✦</span> CARTEIRA DO JOGADOR</div>
     <h2 id="titulo">Suas moedas.</h2>
     <p class="subtitle">Gerencie seu saldo em um só lugar.</p>
+    <p class="bonus-aviso" id="aviso-primeiro" hidden>🎮 <b>Falta pouco!</b> Faça seu primeiro depósito para liberar o treino rápido e as partidas. Comece com R$ 5 e fique com R$ 15.</p>
     <div class="big-balance num">✦ <span id="saldo">0,00</span> <small>moedas</small></div>
     <div class="tabs" role="tablist">
       <button type="button" class="selected" data-acao="deposito" role="tab" aria-selected="true">Depositar</button>
@@ -69,7 +70,7 @@
   </div>
   <div id="dlg-pago" hidden>
     <p class="pix-pago">✓ Pagamento confirmado! As moedas já estão na sua carteira.</p>
-    <button class="primary" type="button" data-fechar>JOGAR ➜</button>
+    <a class="primary" href="../lobby/" id="dlg-jogar" style="display:block;text-align:center;text-decoration:none">JOGAR ➜</a>
   </div>
   <button class="secondary" type="button" data-fechar style="margin-top:10px">← Voltar para a carteira</button>
 </dialog>

@@ -171,6 +171,8 @@ const exigir2faOperador = process.env.ARENA_ADMIN_2FA !== '0';
 const ativacao2faOpcional = process.env.ARENA_ADMIN_2FA === 'opcional';
 const publico = u => ({
   id: u.id, nome: u.nome, email: u.email || '', visitante: !!u.visitante, operador: !!u.operador,
+  // o tutorial (e o jogo) só libera depois do primeiro depósito pago; antes disso a pessoa vai para a carteira
+  depositou: !!u.operador || !!db.prepare("SELECT 1 FROM depositos WHERE usuario_id = ? AND estado = 'pago' LIMIT 1").get(u.id),
   tutorialPendente: !u.tutorial_feito && !u.operador,
   acessoOperador: !!u.operador && (!exigir2faOperador || (ativacao2faOpcional && !u.totp_ativo) || (!!u.totp_ativo && !!u.dois_fatores)),
   ativacao2faOpcional: !!u.operador && ativacao2faOpcional,
