@@ -175,11 +175,13 @@ async function carregarLista() {
     const r = await arena.usuariosAdmin(estado);
     if (n !== pedidoLista) return; // chegou uma busca mais nova
     estado.pagina = r.pagina;
-    $('geral').innerHTML = card('Contas', r.geral.contas) + card('Lucro da casa (todos)', sinal(r.geral.lucroCasa), 'entradas − frutas pagas − estornos')
-      + card('Saldo nas carteiras', m(r.geral.saldos)) + card('Encontrados', r.total);
+    $('geral').innerHTML = card('Contas', r.geral.contas, `${r.geral.pagantes} já depositaram`)
+      + card('Depositado (Pix)', m(r.geral.depositado), 'dinheiro de verdade que entrou')
+      + card('Lucro da casa (dinheiro real)', sinal(r.geral.lucroCasa), 'só contas que pagaram depósito; moedas de teste ficam de fora')
+      + card('Saldo nas carteiras', m(r.geral.saldos), 'de quem pagou depósito') + card('Encontrados', r.total);
     tb.innerHTML = r.usuarios.length ? r.usuarios.map(u => `<tr data-id="${u.id}" class="${u.id === selecionado ? 'sel' : ''}">
       <td class="mut">#${u.id}</td>
-      <td>${esc(u.nome)}${u.operador ? '<span class="tag op">operador</span>' : ''}${u.visitante ? '<span class="tag vis">visitante</span>' : ''}</td>
+      <td>${esc(u.nome)}${u.operador ? '<span class="tag op">operador</span>' : ''}${!u.operador && !u.pagou ? '<span class="tag" title="Nunca pagou um depósito: os valores dela são moedas de teste">teste</span>' : ''}</td>
       <td>${esc(u.email) || '<span class="mut">—</span>'}</td>
       <td class="n">${m(u.saldo)}</td><td class="n">${m(u.depositado)}${u.bonus ? ` <span class="tag warn">+${m(u.bonus)} bônus</span>` : ''}</td><td class="n">${m(u.sacado)}</td>
       <td class="n">${sinal(u.resultado)}</td><td class="n">${sinal(u.lucroCasa)}</td>

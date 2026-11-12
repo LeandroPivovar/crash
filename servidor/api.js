@@ -1197,7 +1197,11 @@ const usuarioResumo = r => ({
   doisFatores: !!r.operador && !!r.totp_ativo, bonusUsado: !!r.bonus_deposito,
   saldo: r.saldo, depositado: r.depositado, bonus: r.bonus, sacado: r.sacado, resultado: r.resultado, lucroCasa: -r.resultado,
   partidas: r.partidas, ultimaPartida: r.ultima_partida, cicloProxima: (r.partidas % cfg.FLUXO_TAM) + 1,
+  // conta que nunca teve depósito pago: o que ela tem/jogou é dinheiro de teste (de antes do Pix)
+  pagou: !!db.prepare("SELECT 1 FROM depositos WHERE usuario_id = ? AND estado = 'pago' LIMIT 1").get(r.id),
 });
+// Dinheiro de verdade = só de quem já teve um depósito pago (as moedas de teste de antes do Pix ficam de fora)
+const SO_QUEM_PAGOU = "usuario_id IN (SELECT usuario_id FROM depositos WHERE estado = 'pago')";
 rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
   const q = consulta(req);
   const busca = String(q.get('q') || '').trim().slice(0, 120);
@@ -1206,17 +1210,21 @@ rota('GET', '/api/admin/usuarios', { operador: true }, ({ req }) => {
   const ordem = ORDENS_USUARIO[q.get('ordem')] || ORDENS_USUARIO.recentes;
   const like = `%${busca.replace(/[\\%_]/g, c => '\\' + c)}%`;
   const idBusca = /^#?\d+$/.test(busca) ? Number(busca.replace('#', '')) : -1;
-  const onde = "(? = '' OR u.nome LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR u.id = ?)";
+  // visitantes (contas antigas sem e-mail, de antes do cadastro obrigatório) não aparecem
+  const onde = "u.visitante = 0 AND (? = '' OR u.nome LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR u.id = ?)";
   const args = [busca, like, like, idBusca];
   const total = db.prepare(`SELECT COUNT(*) AS n FROM usuarios u WHERE ${onde}`).get(...args).n;
   const linhas = db.prepare(`SELECT u.*, ${SOMAS_USUARIO} FROM usuarios u WHERE ${onde} ORDER BY ${ordem} LIMIT ? OFFSET ?`).all(...args, por, (pagina - 1) * por);
-  const geral = db.prepare(`SELECT COUNT(*) AS contas,
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND (tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL))), 0) AS resultado,
-      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real'), 0) AS saldos FROM usuarios`).get();
+  const geral = db.prepare(`SELECT
+      (SELECT COUNT(*) FROM usuarios WHERE visitante = 0 AND operador = 0) AS contas,
+      (SELECT COUNT(DISTINCT usuario_id) FROM depositos WHERE estado = 'pago') AS pagantes,
+      COALESCE((SELECT SUM(valor) FROM depositos WHERE estado = 'pago'), 0) AS depositado,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU} AND (tipo IN ('entrada','premio') OR (tipo = 'estorno' AND partida_id IS NOT NULL))), 0) AS resultado,
+      COALESCE((SELECT SUM(valor) FROM movimentos WHERE carteira = 'real' AND ${SO_QUEM_PAGOU}), 0) AS saldos`).get();
   return {
     total, pagina, por, paginas: Math.max(1, Math.ceil(total / por)),
     usuarios: linhas.map(usuarioResumo),
-    geral: { contas: geral.contas, lucroCasa: -geral.resultado, saldos: geral.saldos },
+    geral: { contas: geral.contas, pagantes: geral.pagantes, depositado: geral.depositado, lucroCasa: -geral.resultado, saldos: geral.saldos },
   };
 });
 const alvoUsuario = id => {
