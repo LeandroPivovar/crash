@@ -148,18 +148,20 @@ try {
   conferir('depósito fora dos valores (R$ 20)', (await a0('POST', '/api/carteira/deposito', { valor: 2000 })).s === 400);
   await a('POST', '/api/carteira/deposito', { valor: 5000 });
   const PIX = { chaveTipo: 'cpf', chave: CPF_OK };
-  const semJogar = await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX });
+  const semJogar = await a('POST', '/api/carteira/saque', { valor: 5000, ...PIX });
   conferir('saque bloqueado antes de jogar o valor depositado', semJogar.s === 403 && semJogar.j.codigo === 'rodada' && (await a('GET', '/api/carteira')).j.rodada.falta === 5000);
+  await creditar(a, 20000); // saldo de R$ 250 para os saques de R$ 50 abaixo
   await jogou(a, 4000);
-  conferir('jogou só parte: continua bloqueado', (await a('POST', '/api/carteira/saque', { valor: 1000, ...PIX })).j?.codigo === 'rodada');
-  await jogou(a, 1000);
-  conferir('chave Pix: CPF inválido', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'cpf', chave: '12345678900' })).s === 400);
-  conferir('chave Pix: telefone sem CPF do titular', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'telefone', chave: '11912345678' })).s === 400);
-  conferir('chave Pix: tipo desconhecido (e-mail)', (await a('POST', '/api/carteira/saque', { valor: 1000, chaveTipo: 'email', chave: 'x@x.com' })).s === 400);
-  conferir('saque maior que o saldo', (await a('POST', '/api/carteira/saque', { valor: 6000, ...PIX })).s === 400);
-  const tentativas = await Promise.all(Array.from({ length: 6 }, (_, k) => a('POST', '/api/carteira/saque', { valor: 1000, ...(k % 2 ? { chaveTipo: 'telefone', chave: '(11) 91234-5678', documento: CPF_OK } : PIX) })));
+  conferir('jogou só parte: continua bloqueado', (await a('POST', '/api/carteira/saque', { valor: 5000, ...PIX })).j?.codigo === 'rodada');
+  await jogou(a, 21000);
+  conferir('saque abaixo do mínimo de R$ 50', (await a('POST', '/api/carteira/saque', { valor: 4999, ...PIX })).s === 400);
+  conferir('chave Pix: CPF inválido', (await a('POST', '/api/carteira/saque', { valor: 5000, chaveTipo: 'cpf', chave: '12345678900' })).s === 400);
+  conferir('chave Pix: telefone sem CPF do titular', (await a('POST', '/api/carteira/saque', { valor: 5000, chaveTipo: 'telefone', chave: '11912345678' })).s === 400);
+  conferir('chave Pix: tipo desconhecido (e-mail)', (await a('POST', '/api/carteira/saque', { valor: 5000, chaveTipo: 'email', chave: 'x@x.com' })).s === 400);
+  conferir('saque maior que o saldo', (await a('POST', '/api/carteira/saque', { valor: 30000, ...PIX })).s === 400);
+  const tentativas = await Promise.all(Array.from({ length: 6 }, (_, k) => a('POST', '/api/carteira/saque', { valor: 5000, ...(k % 2 ? { chaveTipo: 'telefone', chave: '(11) 91234-5678', documento: CPF_OK } : PIX) })));
   const saldoA = (await a('GET', '/api/eu')).j.saldo;
-  conferir('6 saques sem 2FA de 10 ao mesmo tempo com saldo 50', saldoA === 0 && tentativas.filter(r => r.s === 200).length === 5, `saldo final ${saldoA}`);
+  conferir('6 saques de R$ 50 ao mesmo tempo com saldo R$ 250', saldoA === 0 && tentativas.filter(r => r.s === 200).length === 5, `saldo final ${saldoA}`);
   await creditar(a, 3000);
   const duplas = await Promise.all(Array.from({ length: 5 }, () => a('POST', '/api/partidas', { entrada: 3000 })));
   const saldoB = (await a('GET', '/api/eu')).j.saldo;
@@ -539,32 +541,32 @@ try {
   conferir('outro jogador não vê o Pix de ninguém', (await (await novaConta('Curioso', basePix))('GET', `/api/carteira/deposito/${dp2.id}`)).s === 404);
   // saque com envio automático: aprovar manda o Pix; se o banco recusar, o valor volta
   await jogou(px, 11000, bancoDe(dbPix));
-  const pedSaque = await px('POST', '/api/carteira/saque', { valor: 3000, chaveTipo: 'telefone', chave: '(21) 99876-5432', documento: CPF_OK });
-  conferir('saque por telefone pedido (valor reservado)', pedSaque.s === 200 && pedSaque.j.saldo === 8000 && pedSaque.j.saque.chaveFinal === '5432');
+  const pedSaque = await px('POST', '/api/carteira/saque', { valor: 5000, chaveTipo: 'telefone', chave: '(21) 99876-5432', documento: CPF_OK });
+  conferir('saque por telefone pedido (valor reservado)', pedSaque.s === 200 && pedSaque.j.saldo === 6000 && pedSaque.j.saque.chaveFinal === '5432');
   const opPix = cliente(basePix);
   const listaPix = (await opPix('GET', '/api/admin/saques?estado=pendente')).j;
   const sqPix = listaPix.saques.find(x => x.id === pedSaque.j.saque.id);
   conferir('operador vê a chave Pix completa', listaPix.envioAutomatico === true && sqPix?.chave === '(21) 99876-5432' && sqPix.documento === '529.982.247-25');
   const apPix = await opPix('POST', `/api/admin/saques/${sqPix.id}`, { decisao: 'aprovar' });
   const envio = fake.saques[0] || {};
-  conferir('aprovar envia o Pix pela CajuPay (telefone +55 e CPF do titular)', apPix.s === 200 && apPix.j.saque.estado === 'processando' && envio.pix_key === '+5521998765432' && envio.pix_key_type === 'phone' && envio.key_owner_document === CPF_OK && envio.amount_cents === 3000);
+  conferir('aprovar envia o Pix pela CajuPay (telefone +55 e CPF do titular)', apPix.s === 200 && apPix.j.saque.estado === 'processando' && envio.pix_key === '+5521998765432' && envio.pix_key_type === 'phone' && envio.key_owner_document === CPF_OK && envio.amount_cents === 5000);
   const falha = { id: 'evt2', type: 'payout.failed', data: { object: { external_ref: `crashgo-teste-saque-${sqPix.id}`, status: 'failed', last_error: 'chave inexistente' } } };
   const outroSite = await webhook({ ...falha, data: { object: { ...falha.data.object, external_ref: `saque-${sqPix.id}` } } });
   conferir('webhook de outra instalação não altera o saque', outroSite.j?.resultado === 'saque_desconhecido' && (await px('GET', '/api/carteira')).j.saques.find(s => s.id === sqPix.id)?.estado === 'processando');
   const f1 = await webhook(falha), f2 = await webhook(falha);
   conferir('saque recusado pelo banco devolve o valor uma vez só', f1.j?.resultado === 'saque_devolvido' && f2.j?.resultado === 'ja_tratado' && (await px('GET', '/api/eu')).j.saldo === 11000);
-  const ped2 = await px('POST', '/api/carteira/saque', { valor: 2000, chaveTipo: 'cpf', chave: CPF_OK });
+  const ped2 = await px('POST', '/api/carteira/saque', { valor: 5000, chaveTipo: 'cpf', chave: CPF_OK });
   await opPix('POST', `/api/admin/saques/${ped2.j.saque.id}`, { decisao: 'aprovar' });
   const okW = await webhook({ id: 'evt3', type: 'payout.paid', data: { object: { external_ref: `crashgo-teste-saque-${ped2.j.saque.id}`, status: 'paid' } } });
   const meusPx = (await px('GET', '/api/carteira')).j.saques;
-  conferir('saque pago pelo banco fica como pago', okW.j?.resultado === 'saque_pago' && meusPx.find(x => x.id === ped2.j.saque.id)?.estado === 'aprovado' && (await px('GET', '/api/eu')).j.saldo === 9000);
+  conferir('saque pago pelo banco fica como pago', okW.j?.resultado === 'saque_pago' && meusPx.find(x => x.id === ped2.j.saque.id)?.estado === 'aprovado' && (await px('GET', '/api/eu')).j.saldo === 6000);
   pixSrv.kill(); fakeSrv.close(); await dormir(300);
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbPix + s); } catch {} }
 
   console.log('--- saques (pedido, aprovação e recusa)');
   // o jogador "a" pediu 5 saques de 10 (lá em cima): o valor saiu do saldo e eles esperam o operador
   const pend = (await op('GET', '/api/admin/saques?estado=pendente&por=100')).j;
-  const meus = pend.saques.filter(x => x.valor === 1000 && x.estado === 'pendente');
+  const meus = pend.saques.filter(x => x.valor === 5000 && x.estado === 'pendente');
   conferir('saques pedidos ficam pendentes para o operador', meus.length >= 5 && pend.resumo.pendente.quantidade >= 5);
   const [sq1, sq2, sq3] = meus;
   conferir('jogador não aprova o próprio saque', (await a('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'aprovar' })).s === 403
@@ -574,11 +576,11 @@ try {
   const ap = await op('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'aprovar' });
   conferir('aprovar dá baixa sem mexer no saldo', ap.s === 200 && ap.j.saque.estado === 'aprovado' && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque);
   const rec = await op('POST', `/api/admin/saques/${sq2.id}`, { decisao: 'recusar', motivo: 'dados bancários errados' });
-  conferir('recusar devolve o valor ao saldo', rec.s === 200 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 1000);
+  conferir('recusar devolve o valor ao saldo', rec.s === 200 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 5000);
   conferir('saque já decidido não muda de novo', (await op('POST', `/api/admin/saques/${sq2.id}`, { decisao: 'recusar' })).s === 409
     && (await op('POST', `/api/admin/saques/${sq1.id}`, { decisao: 'recusar' })).s === 409);
   const corrida = await Promise.all(Array.from({ length: 6 }, () => op('POST', `/api/admin/saques/${sq3.id}`, { decisao: 'recusar' })));
-  conferir('6 recusas ao mesmo tempo devolvem uma vez só', corrida.filter(r => r.s === 200).length === 1 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 2000);
+  conferir('6 recusas ao mesmo tempo devolvem uma vez só', corrida.filter(r => r.s === 200).length === 1 && (await op('GET', `/api/admin/usuarios/${donoA}`)).j.usuario.saldo === saldoAntesSaque + 10000);
   const cartA = (await a('GET', '/api/carteira')).j;
   conferir('jogador vê o estado dos saques na carteira', cartA.saques.some(x => x.id === sq1.id && x.estado === 'aprovado') && cartA.saques.some(x => x.id === sq2.id && x.estado === 'recusado' && x.motivo === 'dados bancários errados'));
   conferir('decisão inválida', (await op('POST', `/api/admin/saques/${meus[3].id}`, { decisao: 'pagar-em-dobro' })).s === 400);

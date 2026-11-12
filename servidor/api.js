@@ -21,6 +21,7 @@ const replay = require('./replay');
 const COOKIE = 'arena_sessao';
 const SESSAO_DIAS = 30;
 const LIMITE_MOVIMENTO = 10000 * 100;   // 10 000 moedas por depósito/saque
+const SAQUE_MIN = 50 * 100;             // saque mínimo: R$ 50
 const ENTRADA_MIN = 100;                 // 1 moeda
 const ENTRADA_MAX = 10000 * 100;         // 10 000 moedas por partida
 const IDADE_MIN = 18;
@@ -730,7 +731,7 @@ rota('POST', '/api/carteira/saque', { login: true }, ({ u, corpo, ip }) => {
   const pix = chavePix(corpo);
   return transacao(() => {
     const v = centavos(corpo.valor);
-    if (v < 100 || v > LIMITE_MOVIMENTO) throw new Erro(400, 'Informe um valor entre R$ 1 e R$ 10.000.');
+    if (v < SAQUE_MIN || v > LIMITE_MOVIMENTO) throw new Erro(400, 'O saque mínimo é R$ 50 (e o máximo, R$ 10.000).');
     if (v > saldo(u.id)) throw new Erro(400, 'Moedas insuficientes para esse saque.');
     if (rodada(u.id).falta > 0) throw new Erro(403, 'Para sacar, jogue antes o valor que entrou na carteira.', 'rodada');
     lancar(u.id, 'saque', -v, `Saque Pix solicitado (${pix.tipo === 'cpf' ? 'CPF' : 'telefone'}) · aguardando aprovação`);

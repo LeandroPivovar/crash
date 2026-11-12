@@ -87,7 +87,7 @@ $('form').addEventListener('submit', e => {
   erro.textContent = '';
   if (acao === 'deposito') return ocupado($('enviar'), depositar);
   const v = arena.paraCentavos($('valor').value);
-  if (!(v >= 100) || v > arena.LIMITE_MOVIMENTO) { erro.textContent = 'Informe um valor entre R$ 1 e R$ 10.000.'; $('valor').focus(); return; }
+  if (!(v >= 5000) || v > arena.LIMITE_MOVIMENTO) { erro.textContent = 'O saque mínimo é R$ 50 (e o máximo, R$ 10.000).'; $('valor').focus(); return; }
   if (u.visitante) { erro.textContent = 'Visitantes não podem sacar. Crie uma conta para sacar.'; return; }
   if (carteira?.rodada.falta > 0) { erro.textContent = `Para sacar, jogue antes mais ${real(carteira.rodada.falta)} em partidas.`; return; }
   const chave = $('chave').value.replace(/\D/g, ''), documento = $('documento').value.replace(/\D/g, '');
