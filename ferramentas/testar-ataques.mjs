@@ -19,7 +19,7 @@ const dbArq = path.join(os.tmpdir(), `arena-ataques-${Date.now()}.db`);
 const OP = { email: 'op@teste.local', senha: 'senha-do-operador-123' };
 // (o operador do teste ativa o app autenticador no meio do teste; os códigos são calculados com servidor/totp.js)
 const srv = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), String(porta)], {
-  env: { ...process.env, ARENA_DB: dbArq, ARENA_ADMIN_EMAIL: OP.email, ARENA_ADMIN_SENHA: OP.senha, ARENA_CONTAS_POR_HORA: '100', ARENA_LOGINS_POR_IP: '200',
+  env: { ...process.env, ARENA_DB: dbArq, ARENA_ADMIN_EMAIL: OP.email, ARENA_ADMIN_SENHA: OP.senha, ARENA_CONTAS_POR_HORA: '100', ARENA_LOGINS_POR_IP: '200', ARENA_LOGIN_FALHAS_IP: '500',
     ARENA_BACKUP_HORAS: '0', ARENA_SITE_URL: 'https://arena.exemplo', ARENA_SMTP_URL: '' }, stdio: ['ignore', 'pipe', 'pipe'],
 });
 let logSrv = '';
@@ -117,7 +117,7 @@ try {
   // alternando as duas medidas e usando a mediana: um pico de carga da máquina não decide o resultado
   const outro = await novaConta('Tempo'); const emailT = (await outro('GET', '/api/eu')).j.usuario.email;
   const tExiste = [], tNao = [];
-  for (let i = 0; i < 8; i++) { tNao.push(await tempo(`naoexiste${i}${Date.now()}@x.com`)); tExiste.push(await tempo(emailT)); }
+  for (let i = 0; i < 4; i++) { tNao.push(await tempo(`naoexiste${i}${Date.now()}@x.com`)); tExiste.push(await tempo(emailT)); }
   const mediana = l => [...l].sort((a, b) => a - b)[l.length >> 1];
   conferir('tempo do login não revela se o e-mail existe', Math.abs(mediana(tExiste) - mediana(tNao)) < 40, `${Math.round(mediana(tExiste))} ms × ${Math.round(mediana(tNao))} ms`);
   const vit = await novaConta('Vitima');
@@ -444,8 +444,35 @@ try {
   await adminSem2fa('POST', '/api/sair');
   const reentradaSem2fa = await adminSem2fa('POST', '/api/login', OP);
   conferir('autenticador antigo do operador não bloqueia o login quando desligado', reentradaSem2fa.s === 200 && reentradaSem2fa.j.usuario?.acessoOperador === true && !reentradaSem2fa.j.precisa2fa);
+
+  console.log('--- trava de tentativas de login (operador só com senha)');
+  const chuteOp = cliente(baseSem2fa);
+  const t0Chute = performance.now();
+  for (let i = 0; i < 3; i++) await chuteOp('POST', '/api/login', { email: OP.email, senha: 'chute-' + i });
+  conferir('cada senha errada demora (atrasa a força bruta)', performance.now() - t0Chute >= 3 * 380, `${Math.round(performance.now() - t0Chute)} ms para 3 erros`);
+  const opTravado = await cliente(baseSem2fa)('POST', '/api/login', OP);
+  conferir('3 senhas erradas no operador: bloqueia (mesmo com a senha certa)', opTravado.s === 429 && opTravado.j.codigo === 'login_bloqueado', opTravado.j?.erro);
+  const travaOp = bancoSem2fa.prepare('SELECT * FROM bloqueios_login WHERE chave = ?').get(`conta:${OP.email}`);
+  conferir('bloqueio do operador de 15 min registrado no banco', travaOp && travaOp.bloqueado_ate - Date.now() > 14 * 60e3 && travaOp.nivel === 1);
+  const jogT = await novaConta('Trava', baseSem2fa); const emailJogT = (await jogT('GET', '/api/eu')).j.usuario.email;
+  for (let i = 0; i < 4; i++) await cliente(baseSem2fa)('POST', '/api/login', { email: emailJogT, senha: 'chute-' + i });
+  conferir('jogador com 4 erros ainda entra (limite 5)', (await cliente(baseSem2fa)('POST', '/api/login', { email: emailJogT, senha: 'senha-boa-123' })).s === 200);
+  // muitos e-mails diferentes do mesmo endereço (ataque espalhado): o endereço inteiro é bloqueado
+  for (let i = 0; i < 9; i++) await cliente(baseSem2fa)('POST', '/api/login', { email: `chute${i}@x.com`, senha: 'x-errada-1' });
+  const ipTravado = await cliente(baseSem2fa)('POST', '/api/login', { email: emailJogT, senha: 'senha-boa-123' });
+  const travaIp = bancoSem2fa.prepare("SELECT bloqueado_ate FROM bloqueios_login WHERE chave LIKE 'ip:%' ORDER BY bloqueado_ate DESC").get();
+  conferir('15 erros do mesmo IP: o IP é bloqueado para qualquer conta', ipTravado.s === 429 && travaIp?.bloqueado_ate > Date.now() + 14 * 60e3, `${ipTravado.s} ${ipTravado.j?.erro}`);
+  // o bloqueio fica no banco: reiniciar o servidor não libera
+  sem2faSrv.kill(); await dormir(500);
+  const sem2faSrv2 = spawn(process.execPath, [path.join(raiz, 'servidor', 'serve.js'), '8199'], {
+    env: { ...process.env, ARENA_DB: dbSem2fa, ARENA_BACKUP_HORAS: '0', ARENA_SMTP_URL: '', ARENA_SITE_URL: '', ARENA_ADMIN_EMAIL: OP.email, ARENA_ADMIN_SENHA: OP.senha, ARENA_ADMIN_2FA: '0' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let logSem2fa2 = ''; sem2faSrv2.stdout.on('data', d => { logSem2fa2 += d; });
+  for (let i = 0; i < 100 && !logSem2fa2.includes('Crash Arena em'); i++) await dormir(100);
+  conferir('reiniciar o servidor não libera o bloqueio', (await cliente(baseSem2fa)('POST', '/api/login', OP)).s === 429);
   bancoSem2fa.close();
-  sem2faSrv.kill(); await dormir(300);
+  sem2faSrv2.kill(); await dormir(300);
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(dbSem2fa + s); } catch {} }
 
   console.log('--- autenticador opcional do operador');

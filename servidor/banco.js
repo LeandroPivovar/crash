@@ -180,6 +180,17 @@ CREATE TABLE IF NOT EXISTS confirmacoes (
 `);
 
 db.exec(`
+-- Trava de tentativas de login (fica no banco: não zera quando o servidor reinicia). chave = conta:<email> ou
+-- ip:<endereço>. Errou demais dentro da janela: bloqueia por um tempo que dobra a cada bloqueio (nivel).
+CREATE TABLE IF NOT EXISTS bloqueios_login (
+  chave         TEXT PRIMARY KEY,
+  falhas        INTEGER NOT NULL DEFAULT 0,
+  janela_ate    INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate INTEGER NOT NULL DEFAULT 0,
+  nivel         INTEGER NOT NULL DEFAULT 0,
+  atualizado    INTEGER NOT NULL DEFAULT 0
+);
+
 -- Registro de segurança: logins, cadastros, mudanças de regra, análises, bloqueios por excesso de pedidos.
 CREATE TABLE IF NOT EXISTS auditoria (
   id          INTEGER PRIMARY KEY,

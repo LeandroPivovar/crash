@@ -420,15 +420,63 @@ rota('POST', '/api/cadastro', {}, ({ corpo, res, req, ip }) => {
   criarSessao(res, req, Number(r.lastInsertRowid));
   return { usuario: publico(db.prepare('SELECT * FROM usuarios WHERE id = ?').get(r.lastInsertRowid)) };
 });
-rota('POST', '/api/login', {}, ({ corpo, res, req, ip }) => {
+// ---------- trava de tentativas de login (no banco: não zera quando o servidor reinicia) ----------
+// Por conta (e-mail digitado, exista ou não) e por endereço IP. Errou LIMITE vezes dentro da janela: bloqueia;
+// cada novo bloqueio dobra o tempo (até 24 h). A conta de operador tem limite menor. Só quem acerta a senha
+// zera a trava da conta; o IP só "esfria" com o tempo.
+const TRAVA = {
+  janela: 15 * 60e3, base: 15 * 60e3, teto: 24 * 3600e3, esquecer: 24 * 3600e3,
+  conta: Number(process.env.ARENA_LOGIN_FALHAS_CONTA) || 5,
+  operador: Number(process.env.ARENA_LOGIN_FALHAS_OPERADOR) || 3,
+  ip: Number(process.env.ARENA_LOGIN_FALHAS_IP) || 15,
+};
+const lerTrava = chave => db.prepare('SELECT * FROM bloqueios_login WHERE chave = ?').get(chave);
+function conferirTrava(chaves) {
+  const t = agora();
+  for (const chave of chaves) {
+    const b = lerTrava(chave);
+    if (b && b.bloqueado_ate > t) {
+      const min = Math.ceil((b.bloqueado_ate - t) / 60e3);
+      throw new Erro(429, `Muitas tentativas erradas. Tente de novo em ${min >= 60 ? `${Math.ceil(min / 60)} h` : `${min} min`}.`, 'login_bloqueado');
+    }
+  }
+}
+function registrarFalha(chave, limite, { ip, u, email }) {
+  const t = agora();
+  let b = lerTrava(chave);
+  if (!b) b = { chave, falhas: 0, janela_ate: 0, bloqueado_ate: 0, nivel: 0, atualizado: 0 };
+  if (b.atualizado && t - b.atualizado > TRAVA.esquecer) b.nivel = 0; // um dia sem erros: volta ao começo
+  if (b.janela_ate < t) { b.falhas = 0; b.janela_ate = t + TRAVA.janela; }
+  b.falhas++;
+  if (b.falhas >= limite) {
+    const dur = Math.min(TRAVA.teto, TRAVA.base * 2 ** b.nivel);
+    b.bloqueado_ate = t + dur; b.nivel++; b.falhas = 0; b.janela_ate = 0;
+    auditar(u?.operador ? 'operador_login_bloqueado' : 'login_bloqueado', { u: u?.id, ip, detalhe: { chave: chave.replace(/^conta:/, 'conta:').slice(0, 140), minutos: Math.round(dur / 60e3), email } });
+    if (u?.operador) console.warn(`[segurança] login do operador bloqueado por ${Math.round(dur / 60e3)} min (IP ${ip})`);
+  }
+  db.prepare(`INSERT INTO bloqueios_login (chave, falhas, janela_ate, bloqueado_ate, nivel, atualizado) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(chave) DO UPDATE SET falhas = excluded.falhas, janela_ate = excluded.janela_ate, bloqueado_ate = excluded.bloqueado_ate,
+      nivel = excluded.nivel, atualizado = excluded.atualizado`).run(chave, b.falhas, b.janela_ate, b.bloqueado_ate, b.nivel, t);
+}
+// limpeza: travas antigas e já vencidas saem do banco
+setInterval(() => db.prepare('DELETE FROM bloqueios_login WHERE bloqueado_ate < ? AND atualizado < ?').run(agora(), agora() - 2 * TRAVA.esquecer), 3600e3).unref();
+const esperar = ms => new Promise(ok => setTimeout(ok, ms));
+rota('POST', '/api/login', {}, async ({ corpo, res, req, ip }) => {
   const email = texto(corpo.email, 120).toLowerCase();
   limitar(`login-ip:${ip}`, LOGINS_POR_IP, 10 * 60e3, 'Muitas tentativas. Espere alguns minutos e tente de novo.');
-  limitar(`login-conta:${email}`, 10, 15 * 60e3, 'Muitas tentativas nesta conta. Espere 15 minutos.');
+  const chaveConta = `conta:${email}`, chaveIp = `ip:${ip}`;
+  conferirTrava([chaveConta, chaveIp]);
   const u = db.prepare('SELECT * FROM usuarios WHERE email = ?').get(email);
   // confere mesmo sem conta (com um hash falso), para o tempo de resposta não revelar quais e-mails existem
   const ok = confereSenha(String(corpo.senha || ''), u?.senha_hash);
-  if (!u || !ok) { auditar('login_falhou', { u: u?.id, ip, detalhe: email }); throw new Erro(401, 'E-mail ou senha incorretos.'); }
-  baldes.delete(`login-conta:${email}`);
+  if (!u || !ok) {
+    auditar(u?.operador ? 'login_operador_falhou' : 'login_falhou', { u: u?.id, ip, detalhe: email });
+    registrarFalha(chaveConta, u?.operador ? TRAVA.operador : TRAVA.conta, { ip, u, email });
+    registrarFalha(chaveIp, TRAVA.ip, { ip, u, email });
+    await esperar(700); // cada erro custa 0,7 s (fixo: não muda o tempo entre e-mail que existe e que não existe)
+    throw new Erro(401, 'E-mail ou senha incorretos.');
+  }
+  db.prepare('DELETE FROM bloqueios_login WHERE chave = ?').run(chaveConta);
   if (CONFIRMAR_EMAIL && !u.email_confirmado) throw new Erro(403, 'Confirme seu e-mail para entrar. Procure o link que enviamos (veja também o spam).', 'confirmar_email');
   // conta com app autenticador: a senha certa só abre um desafio; a sessão vem depois do código
   if (u.operador && u.totp_ativo && exigir2faOperador) {
